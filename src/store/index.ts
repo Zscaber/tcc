@@ -1,4 +1,4 @@
-import { AppState, User, Person, Project, Equipment, Problem, GutAnalysis, ActionPlan, MaintenanceRecord, ProductionActivity, NonConformity, Notification, HistoryEntry, Layout } from '../types';
+import { AppState, User, Person, Project, Equipment, Problem, GutAnalysis, ActionPlan, MaintenanceRecord, ProductionActivity, NonConformity, Notification, HistoryEntry, Layout, AreaMap } from '../types';
 
 const STORAGE_KEY = 'manutencao_flexivel_db';
 
@@ -16,6 +16,7 @@ const defaultState: AppState = {
   notifications: [],
   history: [],
   layouts: [],
+  areaMaps: [],
   demoDataLoaded: false,
 };
 
@@ -317,6 +318,28 @@ export const db = {
     saveState(state);
   },
 
+  // Area Maps
+  getAreaMaps: () => loadState().areaMaps,
+  getAreaMapById: (id: string) => loadState().areaMaps.find(a => a.id === id),
+  createAreaMap: (areaMap: Omit<AreaMap, 'id' | 'createdAt' | 'updatedAt'>): AreaMap => {
+    const state = loadState();
+    const now = new Date().toISOString();
+    const newAreaMap: AreaMap = { ...areaMap, id: generateId(), createdAt: now, updatedAt: now };
+    state.areaMaps.push(newAreaMap);
+    saveState(state);
+    return newAreaMap;
+  },
+  updateAreaMap: (id: string, data: Partial<AreaMap>) => {
+    const state = loadState();
+    const idx = state.areaMaps.findIndex(a => a.id === id);
+    if (idx >= 0) { state.areaMaps[idx] = { ...state.areaMaps[idx], ...data, updatedAt: new Date().toISOString() }; saveState(state); }
+  },
+  deleteAreaMap: (id: string) => {
+    const state = loadState();
+    state.areaMaps = state.areaMaps.filter(a => a.id !== id);
+    saveState(state);
+  },
+
   // Demo data
   loadDemoData: () => {
     const state = loadState();
@@ -419,6 +442,7 @@ export const db = {
     state.notifications = state.notifications.filter(n => !n.id.startsWith('demo-'));
     state.history = state.history.filter(h => !h.id.startsWith('demo-'));
     state.layouts = state.layouts.filter(l => !l.id.startsWith('demo-'));
+    state.areaMaps = state.areaMaps.filter(a => !a.id.startsWith('demo-'));
     state.demoDataLoaded = false;
     saveState(state);
   },

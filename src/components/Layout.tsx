@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../store';
-import { LayoutDashboard, FolderKanban, Users, Wrench, AlertTriangle, BrainCircuit, BarChart3, ClipboardList, Settings, Bell, LogOut, Menu, X, Search, FileText, History, Map, ChevronDown } from 'lucide-react';
+import { LayoutDashboard, FolderKanban, Users, Wrench, AlertTriangle, BrainCircuit, BarChart3, ClipboardList, Settings, Bell, LogOut, Menu, X, Search, FileText, History, Map, MapPin } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 
 const navItems = [
@@ -16,6 +16,7 @@ const navItems = [
   { path: '/production', label: 'Produção', icon: FileText },
   { path: '/quality', label: 'Qualidade', icon: BarChart3 },
   { path: '/layout', label: 'Layout/Planta', icon: Map },
+  { path: '/area-maps', label: 'Mapa de Áreas', icon: MapPin },
   { path: '/ai-assistant', label: 'Assistente IA', icon: BrainCircuit },
   { path: '/notifications', label: 'Notificações', icon: Bell },
   { path: '/history', label: 'Histórico', icon: History },

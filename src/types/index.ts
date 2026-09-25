@@ -193,6 +193,51 @@ export interface Layout {
   createdAt: string;
 }
 
+// ==================== AREA MAP ====================
+
+export type MapObjectType = 
+  | 'machine' | 'lathe' | 'drill' | 'press' | 'compressor' | 'welder' | 'motor' | 'custom_equipment'
+  | 'workbench' | 'cabinet' | 'shelf' | 'stock' | 'pallet' | 'table'
+  | 'wall' | 'door' | 'window' | 'column' | 'circulation'
+  | 'extinguisher' | 'computer' | 'text' | 'marker' | 'inspection_point'
+  | 'zone' | 'photo_point';
+
+export interface MapObjectPhoto {
+  id: string;
+  dataUrl: string;
+  caption: string;
+  createdAt: string;
+}
+
+export interface MapObject {
+  id: string;
+  type: MapObjectType;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation: number;
+  label: string;
+  color: string;
+  equipmentId?: string;
+  zoneId?: string;
+  description?: string;
+  photos: MapObjectPhoto[];
+  notes?: string;
+}
+
+export interface AreaMap {
+  id: string;
+  name: string;
+  description: string;
+  width: number; // meters
+  length: number; // meters
+  objects: MapObject[];
+  generalPhotos: MapObjectPhoto[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface AppState {
   users: User[];
   people: Person[];
@@ -207,5 +252,6 @@ export interface AppState {
   notifications: Notification[];
   history: HistoryEntry[];
   layouts: Layout[];
+  areaMaps: AreaMap[];
   demoDataLoaded: boolean;
 }
