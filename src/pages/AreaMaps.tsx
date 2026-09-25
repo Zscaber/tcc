@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { db } from '../store';
 import { useAuth } from '../contexts/AuthContext';
 import { PageHeader, Button, Modal, Input, Textarea, EmptyState, Card, showToast, ConfirmDialog } from '../components/ui';
-import { Plus, MapPin, Edit2, Trash2, Eye, Ruler } from 'lucide-react';
+import { Plus, MapPin, Edit2, Trash2, Eye, Ruler, FileImage } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { AreaMap } from '../types';
 
@@ -110,6 +110,11 @@ export default function AreaMaps() {
                   <span>🛠 {equipmentCount} equip.</span>
                   <span>📍 {inspectionCount} pontos</span>
                   <span>📷 {photoCount} fotos</span>
+                  {area.backgroundImage && (
+                    <span className="flex items-center gap-1 text-blue-600">
+                      <FileImage size={12} /> Planta
+                    </span>
+                  )}
                 </div>
 
                 <div className="flex gap-2">

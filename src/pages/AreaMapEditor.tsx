@@ -3,7 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { db, generateId } from '../store';
 import { useAuth } from '../contexts/AuthContext';
 import { Button, Modal, Input, Select, Textarea, Card, Badge, showToast, ConfirmDialog } from '../components/ui';
-import { ArrowLeft, Save, ZoomIn, ZoomOut, Maximize2, Plus, Trash2, Copy, RotateCw, Upload, Camera, Wrench, AlertTriangle, Eye, X, ChevronDown, Image } from 'lucide-react';
+import { ArrowLeft, Save, ZoomIn, ZoomOut, Maximize2, Plus, Trash2, Copy, RotateCw, Upload, Camera, Wrench, AlertTriangle, Eye, X, ChevronDown, Image, FileImage } from 'lucide-react';
 import { AreaMap, MapObject, MapObjectType, MapObjectPhoto } from '../types';
 
 // Object library definitions
@@ -62,6 +62,7 @@ export default function AreaMapEditor() {
   const [activeCategory, setActiveCategory] = useState('Equipamentos');
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0, origPanX: 0, origPanY: 0 });
+  const [importPlantModal, setImportPlantModal] = useState(false);
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -269,6 +270,24 @@ export default function AreaMapEditor() {
     reader.readAsDataURL(file);
   };
 
+  // Background image upload
+  const handleBackgroundUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      setArea({ ...area, backgroundImage: ev.target?.result as string });
+      showToast('success', 'Planta importada com sucesso');
+      setImportPlantModal(false);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const removeBackground = () => {
+    setArea({ ...area, backgroundImage: undefined });
+    showToast('success', 'Planta removida');
+  };
+
   // Get icon for object type
   const getObjectIcon = (type: MapObjectType) => {
     const def = objectLibrary.find(o => o.type === type);
@@ -347,7 +366,7 @@ export default function AreaMapEditor() {
             <p className="text-xs text-gray-500">{area.width}m × {area.length}m</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2">
           {/* Zoom controls */}
           <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg px-2 py-1">
             <button onClick={() => setZoom(z => Math.max(0.3, z - 0.1))} className="p-1 hover:bg-gray-100 rounded"><ZoomOut size={14} /></button>
@@ -355,9 +374,16 @@ export default function AreaMapEditor() {
             <button onClick={() => setZoom(z => Math.min(5, z + 0.1))} className="p-1 hover:bg-gray-100 rounded"><ZoomIn size={14} /></button>
             <button onClick={fitToScreen} className="p-1 hover:bg-gray-100 rounded ml-1" title="Ajustar à tela"><Maximize2 size={14} /></button>
           </div>
+          <Button variant="secondary" onClick={() => setImportPlantModal(true)} title="Importar planta">
+            <FileImage size={16} className="inline mr-1" /> {area.backgroundImage ? 'Trocar Planta' : 'Importar Planta'}
+          </Button>
+          {area.backgroundImage && (
+            <Button variant="ghost" onClick={removeBackground} title="Remover planta">
+              <Trash2 size={16} className="text-red-500" />
+            </Button>
+          )}
           <Button onClick={handleSave}><Save size={16} className="inline mr-1" /> Salvar</Button>
-        </div>
-      </div>
+        </div>      </div>
 
       {/* Main editor area */}
       <div className="flex-1 flex gap-3 min-h-0">
@@ -422,6 +448,19 @@ export default function AreaMapEditor() {
             <rect className="map-bg" x={-10} y={-10} width={area.width + 20} height={area.length + 20} fill="white" onMouseDown={handleBgMouseDown} />
             <rect x="0" y="0" width={area.width} height={area.length} fill="url(#grid)" />
             <rect x="0" y="0" width={area.width} height={area.length} fill="url(#gridLarge)" />
+            {/* Background image (imported plant) */}
+            {area.backgroundImage && (
+              <image
+                href={area.backgroundImage}
+                x="0"
+                y="0"
+                width={area.width}
+                height={area.length}
+                preserveAspectRatio="xMidYMid meet"
+                opacity="0.4"
+                style={{ pointerEvents: 'none' }}
+              />
+            )}
             {/* Area border */}
             <rect x="0" y="0" width={area.width} height={area.length} fill="none" stroke="#94a3b8" strokeWidth="0.1" />
             {/* Dimension labels */}
@@ -597,6 +636,42 @@ export default function AreaMapEditor() {
             </Button>
           </div>
         )}
+      </Modal>
+
+      {/* Import Plant Modal */}
+      <Modal isOpen={importPlantModal} onClose={() => setImportPlantModal(false)} title="Importar Planta">
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            Importe uma imagem da planta do ambiente para usar como referência no mapa. 
+            A imagem será exibida em transparência no fundo do mapa.
+          </p>
+          
+          {area.backgroundImage && (
+            <div className="border border-gray-200 rounded-lg p-2">
+              <p className="text-xs text-gray-500 mb-2">Planta atual:</p>
+              <img src={area.backgroundImage} alt="Planta atual" className="w-full h-40 object-contain bg-gray-50 rounded" />
+            </div>
+          )}
+
+          <div className="space-y-3">
+            <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+              <FileImage size={32} className="text-gray-400 mb-2" />
+              <span className="text-sm text-gray-600 font-medium">Clique para selecionar imagem</span>
+              <span className="text-xs text-gray-400 mt-1">PNG, JPG ou SVG</span>
+              <input type="file" accept="image/*" className="hidden" onChange={handleBackgroundUpload} />
+            </label>
+          </div>
+
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+            <p className="text-xs text-blue-800">
+              <strong>Dica:</strong> Você pode usar uma planta arquitetônica, foto aérea ou qualquer imagem de referência. 
+              Os objetos do mapa serão posicionados sobre a imagem.
+            </p>
+          </div>
+        </div>
+        <div className="flex justify-end gap-3 mt-6">
+          <Button variant="secondary" onClick={() => setImportPlantModal(false)}>Fechar</Button>
+        </div>
       </Modal>
 
       <ConfirmDialog isOpen={!!deleteConfirm} onClose={() => setDeleteConfirm(null)} onConfirm={() => { if (deleteConfirm) { deleteObject(deleteConfirm); setDeleteConfirm(null); } }} title="Excluir Objeto" message="Deseja remover este objeto do mapa?" />

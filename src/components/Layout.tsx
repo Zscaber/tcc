@@ -15,7 +15,6 @@ const navItems = [
   { path: '/maintenance', label: 'Manutenção', icon: Settings },
   { path: '/production', label: 'Produção', icon: FileText },
   { path: '/quality', label: 'Qualidade', icon: BarChart3 },
-  { path: '/layout', label: 'Layout/Planta', icon: Map },
   { path: '/area-maps', label: 'Mapa de Áreas', icon: MapPin },
   { path: '/ai-assistant', label: 'Assistente IA', icon: BrainCircuit },
   { path: '/notifications', label: 'Notificações', icon: Bell },

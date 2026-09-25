@@ -234,6 +234,7 @@ export interface AreaMap {
   length: number; // meters
   objects: MapObject[];
   generalPhotos: MapObjectPhoto[];
+  backgroundImage?: string; // base64 image data URL
   createdAt: string;
   updatedAt: string;
 }
