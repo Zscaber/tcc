@@ -171,24 +171,53 @@ export interface HistoryEntry {
   createdAt: string;
 }
 
+export interface PhotoPoint {
+  id: string;
+  url: string;
+  title?: string;
+  description?: string;
+  date?: string;
+  notes?: string;
+}
+
+export interface AreaPhoto {
+  id: string;
+  url: string;
+  title: string;
+  description?: string;
+  createdAt: string;
+}
+
+export type MapElementType = 'equipment' | 'organization' | 'structure' | 'other' | 'sector' | 'text' | 'photo' | 'marker' | 'area';
+
 export interface LayoutElement {
   id: string;
   layoutId: string;
-  type: 'area' | 'sector' | 'equipment';
+  type: MapElementType;
+  category?: string;
+  subType?: string;
   x: number;
   y: number;
   width: number;
   height: number;
+  rotation?: number;
   label: string;
   equipmentId?: string;
-  color: string;
+  color?: string;
+  notes?: string;
+  photos?: PhotoPoint[];
+  icon?: string;
 }
 
 export interface Layout {
   id: string;
-  projectId: string;
+  projectId?: string;
   name: string;
+  description?: string;
+  widthMeters?: number;
+  lengthMeters?: number;
   backgroundImage?: string;
+  generalPhotos?: AreaPhoto[];
   elements: LayoutElement[];
   createdAt: string;
 }
