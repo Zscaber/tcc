@@ -1,16 +1,27 @@
 import React, { useState } from 'react';
-import { db } from '../store';
-import { PageHeader, Card, Button, Input } from '../components/ui';
-import { BrainCircuit, Send, Bot, User } from 'lucide-react';
+import { db, isDateOverdue, getOverdueDaysText, isDateUpcoming } from '../store';
+import { PageHeader, Card, Button, Badge } from '../components/ui';
+import { BrainCircuit, Send, Bot, User, ArrowRight, Wrench, Settings, AlertTriangle, ClipboardList, ShieldAlert } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
-interface Message { role: 'user' | 'assistant'; content: string; }
+interface ActionLink {
+  label: string;
+  path: string;
+}
+
+interface Message {
+  role: 'user' | 'assistant';
+  content: string;
+  actionLinks?: ActionLink[];
+}
 
 export default function AIAssistant() {
+  const navigate = useNavigate();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
 
-  const processQuery = (query: string): string => {
-    const q = query.toLowerCase();
+  const processQuery = (query: string): { content: string; actionLinks?: ActionLink[] } => {
+    const q = query.toLowerCase().trim();
     const equipment = db.getEquipment();
     const problems = db.getProblems();
     const actionPlans = db.getActionPlans();
@@ -18,162 +29,241 @@ export default function AIAssistant() {
     const projects = db.getProjects();
     const people = db.getPeople();
     const gutAnalyses = db.getGutAnalyses();
+    const nonConformities = db.getNonConformities();
 
-    // Equipment queries
-    if (q.includes('equipamento') && (q.includes('manutenção') || q.includes('manutencao'))) {
+    // 1. "Quais equipamentos estão em manutenção?"
+    if (q.includes('equipamento') && q.includes('manutenção') && !q.includes('próxima') && !q.includes('proxima')) {
       const inMaint = equipment.filter(e => e.status === 'maintenance');
-      if (inMaint.length === 0) return 'Nenhum equipamento está em manutenção no momento.';
-      return `Existem ${inMaint.length} equipamento(s) em manutenção:\n${inMaint.map(e => `• ${e.name} (${e.code}) — Setor: ${e.sector}`).join('\n')}`;
+      if (inMaint.length === 0) {
+        return { content: '✅ Nenhum equipamento está marcado em manutenção no momento.' };
+      }
+      const listStr = inMaint.map(e => `• ${e.name} (${e.code}) — Setor: ${e.sector || 'Geral'} | Local: ${e.location || 'N/A'}`).join('\n');
+      return {
+        content: `Encontrei ${inMaint.length} equipamento(s) atualmente em manutenção:\n\n${listStr}`,
+        actionLinks: [{ label: 'Abrir Módulo de Equipamentos', path: '/equipment' }, { label: 'Abrir Mapa de Áreas', path: '/layout' }],
+      };
     }
 
-    if (q.includes('equipamento') && (q.includes('parado') || q.includes('operação') || q.includes('operacao'))) {
-      const operating = equipment.filter(e => e.status === 'operating');
-      const stopped = equipment.filter(e => e.status === 'stopped');
-      return `Equipamentos em operação: ${operating.length}\nEquipamentos parados: ${stopped.length}\n${stopped.map(e => `• ${e.name}`).join('\n')}`;
-    }
-
-    if (q.includes('equipamento')) {
-      return `Total de equipamentos cadastrados: ${equipment.length}\n${equipment.map(e => `• ${e.name} — Status: ${e.status}`).join('\n')}`;
-    }
-
-    // Action plans
-    if (q.includes('plano') && (q.includes('atrasado') || q.includes('vencido'))) {
-      const overdue = actionPlans.filter(a => a.status === 'overdue' || (a.when && new Date(a.when) < new Date() && a.status !== 'completed' && a.status !== 'cancelled'));
-      if (overdue.length === 0) return 'Nenhum plano de ação atrasado no momento.';
-      return `Existem ${overdue.length} plano(s) de ação atrasado(s):\n${overdue.map(a => `• ${a.what || 'Sem descrição'} — Prazo: ${a.when}`).join('\n')}`;
-    }
-
-    if (q.includes('plano') || q.includes('5w2h') || q.includes('ação') || q.includes('acao')) {
-      return `Total de planos de ação: ${actionPlans.length}\n• Pendentes: ${actionPlans.filter(a => a.status === 'pending').length}\n• Em andamento: ${actionPlans.filter(a => a.status === 'in_progress').length}\n• Concluídos: ${actionPlans.filter(a => a.status === 'completed').length}\n• Atrasados: ${actionPlans.filter(a => a.status === 'overdue').length}`;
-    }
-
-    // GUT
-    if (q.includes('gut') || q.includes('prioridade') || q.includes('priorizacao') || q.includes('priorização')) {
-      const sorted = [...gutAnalyses].sort((a, b) => b.score - a.score);
-      if (sorted.length === 0) return 'Nenhuma análise GUT registrada.';
-      const top = sorted.slice(0, 5);
-      return `Análises GUT por prioridade:\n${top.map((g, i) => {
-        const p = problems.find(pr => pr.id === g.problemId);
-        return `${i + 1}. ${p?.title || 'Problema'} — Score: ${g.score} (${g.classification})`;
-      }).join('\n')}`;
-    }
-
-    // Problems
-    if (q.includes('problema')) {
-      const open = problems.filter(p => p.status !== 'resolved' && p.status !== 'cancelled');
-      if (open.length === 0) return 'Nenhum problema em aberto.';
-      return `Problemas em aberto: ${open.length}\n${open.map(p => `• ${p.title} — Status: ${p.status} — Categoria: ${p.category}`).join('\n')}`;
-    }
-
-    // Maintenance
-    if (q.includes('manutenção') || q.includes('manutencao')) {
-      const pending = maintenance.filter(m => m.status !== 'completed' && m.status !== 'cancelled');
-      return `Manutenções pendentes: ${pending.length}\n${pending.map(m => {
+    // 2. "Quais manutenções estão atrasadas?"
+    if (q.includes('manutenção') && (q.includes('atrasad') || q.includes('vencid'))) {
+      const overdueMaint = maintenance.filter(m => m.status !== 'completed' && m.status !== 'cancelled' && isDateOverdue(m.deadline, m.status));
+      if (overdueMaint.length === 0) {
+        return { content: '✅ Nenhuma manutenção com prazo vencido/atrasada no momento.' };
+      }
+      const listStr = overdueMaint.map(m => {
         const eq = equipment.find(e => e.id === m.equipmentId);
-        return `• ${eq?.name || 'Equipamento'} — ${m.description} (${m.type}) — Status: ${m.status}`;
-      }).join('\n')}`;
+        const overdueDays = getOverdueDaysText(m.deadline);
+        return `• ${eq?.name || 'Equipamento'} — ${m.description}\n  Prazo limite era: ${m.deadline} (${overdueDays || 'Atrasada'})\n  Responsável: ${people.find(p => p.id === m.responsibleId)?.name || 'N/A'}`;
+      }).join('\n\n');
+
+      return {
+        content: `Encontrei ${overdueMaint.length} manutenção(ões) atrasada(s):\n\n${listStr}`,
+        actionLinks: [{ label: 'Abrir Módulo de Manutenção', path: '/maintenance' }],
+      };
     }
 
-    // Projects
-    if (q.includes('projeto')) {
-      return `Total de projetos: ${projects.length}\n• Planejamento: ${projects.filter(p => p.status === 'planning').length}\n• Em andamento: ${projects.filter(p => p.status === 'in_progress').length}\n• Pausados: ${projects.filter(p => p.status === 'paused').length}\n• Concluídos: ${projects.filter(p => p.status === 'completed').length}\n• Cancelados: ${projects.filter(p => p.status === 'cancelled').length}`;
+    // 3. "Quais problemas possuem maior pontuação GUT?"
+    if (q.includes('gut') || q.includes('maior pontuação') || q.includes('prioridade')) {
+      const sortedGut = [...gutAnalyses].sort((a, b) => b.score - a.score);
+      if (sortedGut.length === 0) {
+        return { content: 'Nenhuma análise GUT registrada no sistema.' };
+      }
+      const listStr = sortedGut.slice(0, 5).map((g, idx) => {
+        const pr = problems.find(p => p.id === g.problemId);
+        return `${idx + 1}. ${pr?.title || 'Problema'} — Pontuação GUT: ${g.score} (${g.classification})\n   Cálculo: Gravidade (${g.gravity}) × Urgência (${g.urgency}) × Tendência (${g.tendency})`;
+      }).join('\n\n');
+
+      return {
+        content: `Ranking de problemas com maior pontuação na Matriz GUT:\n\n${listStr}`,
+        actionLinks: [{ label: 'Abrir Matriz GUT', path: '/gut' }, { label: 'Abrir Módulo de Problemas', path: '/problems' }],
+      };
     }
 
-    // Activities
-    if (q.includes('atividade') || q.includes('tarefa')) {
-      const activities = db.getProductionActivities();
-      const pending = activities.filter(a => a.status === 'pending' || a.status === 'in_progress');
-      if (pending.length === 0) return 'Nenhuma atividade pendente.';
-      return `Atividades pendentes: ${pending.length}\n${pending.map(a => `• ${a.title} — Status: ${a.status} — Prazo: ${a.deadline || 'N/A'}`).join('\n')}`;
+    // 4. "Quais planos 5W2H estão atrasados?"
+    if ((q.includes('plano') || q.includes('5w2h')) && (q.includes('atrasad') || q.includes('vencid'))) {
+      const overduePlans = actionPlans.filter(a => a.status !== 'completed' && a.status !== 'cancelled' && isDateOverdue(a.when, a.status));
+      if (overduePlans.length === 0) {
+        return { content: '✅ Nenhum plano de ação 5W2H está atrasado no momento.' };
+      }
+      const listStr = overduePlans.map(a => {
+        const overdueDays = getOverdueDaysText(a.when);
+        return `• ${a.what}\n  Por quê: ${a.why}\n  Prazo (When): ${a.when} (${overdueDays || 'Atrasado'})`;
+      }).join('\n\n');
+
+      return {
+        content: `Encontrei ${overduePlans.length} plano(s) de ação 5W2H atrasado(s):\n\n${listStr}`,
+        actionLinks: [{ label: 'Abrir Planos 5W2H', path: '/action-plans' }],
+      };
     }
 
-    // People
-    if (q.includes('pessoa') || q.includes('pessoal') || q.includes('equipe')) {
-      return `Total de pessoas cadastradas: ${people.length}\n${people.map(p => `• ${p.name} — ${p.position}`).join('\n')}`;
+    // 5. "Quais equipamentos possuem manutenção próxima?"
+    if (q.includes('manutenção próxima') || q.includes('manutencao proxima') || q.includes('vencer')) {
+      const upcoming = maintenance.filter(m => m.status !== 'completed' && m.status !== 'cancelled' && !isDateOverdue(m.deadline, m.status) && isDateUpcoming(m.deadline, 15));
+      if (upcoming.length === 0) {
+        return { content: 'Nenhuma manutenção preventiva ou corretiva agendada para os próximos 15 dias.' };
+      }
+      const listStr = upcoming.map(m => {
+        const eq = equipment.find(e => e.id === m.equipmentId);
+        return `• ${eq?.name || 'Equipamento'} (${eq?.code || 'N/A'})\n  Serviço: ${m.description}\n  Data limite agendada: ${m.deadline}`;
+      }).join('\n\n');
+
+      return {
+        content: `Equipamentos com manutenção agendada nos próximos dias:\n\n${listStr}`,
+        actionLinks: [{ label: 'Ver Manutenções Agendadas', path: '/maintenance' }],
+      };
     }
 
-    // General
-    if (q.includes('resumo') || q.includes('geral') || q.includes('overview')) {
-      return `📊 Resumo do Sistema:\n• Projetos: ${projects.length}\n• Equipamentos: ${equipment.length}\n• Problemas abertos: ${problems.filter(p => p.status !== 'resolved' && p.status !== 'cancelled').length}\n• Planos de ação: ${actionPlans.length}\n• Manutenções pendentes: ${maintenance.filter(m => m.status !== 'completed').length}\n• Pessoas: ${people.length}`;
+    // 6. "Faça um resumo da situação atual da manutenção." / Resumo geral
+    if (q.includes('resumo') || q.includes('situação') || q.includes('situacao') || q.includes('geral')) {
+      const openProbs = problems.filter(p => p.status !== 'resolved' && p.status !== 'cancelled').length;
+      const inMaintEq = equipment.filter(e => e.status === 'maintenance').length;
+      const overdueMaint = maintenance.filter(m => m.status !== 'completed' && m.status !== 'cancelled' && isDateOverdue(m.deadline, m.status)).length;
+      const overduePlans = actionPlans.filter(a => a.status !== 'completed' && a.status !== 'cancelled' && isDateOverdue(a.when, a.status)).length;
+
+      return {
+        content: `📊 **Resumo em Tempo Real da Gestão de Manutenção:**\n\n` +
+          `• **Equipamentos Cadastrados:** ${equipment.length} (${inMaintEq} em manutenção)\n` +
+          `• **Problemas em Aberto:** ${openProbs}\n` +
+          `• **Manutenções Atrasadas:** ${overdueMaint}\n` +
+          `• **Planos 5W2H Atrasados:** ${overduePlans}\n` +
+          `• **Não Conformidades Registradas:** ${nonConformities.length}\n` +
+          `• **Projetos em Andamento:** ${projects.filter(p => p.status === 'in_progress').length}`,
+        actionLinks: [{ label: 'Ir para o Dashboard', path: '/' }],
+      };
     }
 
-    // Equipment-specific
+    // Search by equipment name
     for (const eq of equipment) {
-      if (q.includes(eq.name.toLowerCase())) {
-        const eqProblems = problems.filter(p => p.equipmentId === eq.id);
-        const eqMaintenance = maintenance.filter(m => m.equipmentId === eq.id);
-        return `Informações sobre "${eq.name}":\n• Status: ${eq.status}\n• Setor: ${eq.sector}\n• Problemas relacionados: ${eqProblems.length}\n• Manutenções: ${eqMaintenance.length}\n${eqProblems.map(p => `  - Problema: ${p.title}`).join('\n')}`;
+      if (q.includes(eq.name.toLowerCase()) || q.includes(eq.code.toLowerCase())) {
+        const eqProbs = problems.filter(p => p.equipmentId === eq.id);
+        const eqMaint = maintenance.filter(m => m.equipmentId === eq.id);
+        return {
+          content: `🔎 **Ficha do Equipamento: ${eq.name} (${eq.code})**\n\n` +
+            `• Status: **${eq.status}** | Criticidade: **${eq.criticality || 'Média'}**\n` +
+            `• Setor: ${eq.sector || 'Geral'} | Local: ${eq.location || 'N/A'}\n` +
+            `• Próxima Manutenção: ${eq.nextMaintenance || 'N/A'}\n` +
+            `• Problemas Associados: ${eqProbs.length}\n` +
+            `• Histórico de Manutenções: ${eqMaint.length} registro(s)`,
+          actionLinks: [{ label: `Ver Ficha de ${eq.name}`, path: '/equipment' }],
+        };
       }
     }
 
-    return 'Não encontrei informações suficientes para responder essa pergunta. Tente perguntar sobre:\n• Equipamentos em manutenção\n• Planos de ação atrasados\n• Problemas com maior pontuação GUT\n• Resumo geral do sistema\n• Projetos ativos\n• Atividades pendentes';
+    return {
+      content: 'Não encontrei uma resposta exata para essa consulta. Você pode selecionar uma das perguntas frequentes recomendadas abaixo ou perguntar por nome de equipamentos.',
+      actionLinks: [{ label: 'Ver Todos os Equipamentos', path: '/equipment' }, { label: 'Ver Manutenção', path: '/maintenance' }],
+    };
   };
 
   const handleSend = () => {
     if (!input.trim()) return;
-    const userMsg: Message = { role: 'user', content: input };
-    const response = processQuery(input);
-    const assistantMsg: Message = { role: 'assistant', content: response };
+    const userMsg: Message = { role: 'user', content: input.trim() };
+    const queryResult = processQuery(input.trim());
+    const assistantMsg: Message = { role: 'assistant', content: queryResult.content, actionLinks: queryResult.actionLinks };
     setMessages([...messages, userMsg, assistantMsg]);
     setInput('');
   };
 
   const suggestions = [
     'Quais equipamentos estão em manutenção?',
-    'Quais planos de ação estão atrasados?',
-    'Quais são os problemas com maior pontuação GUT?',
-    'Resumo geral do sistema',
-    'Quais atividades precisam ser realizadas?',
+    'Quais manutenções estão atrasadas?',
+    'Quais problemas possuem maior pontuação GUT?',
+    'Quais planos 5W2H estão atrasados?',
+    'Quais equipamentos possuem manutenção próxima?',
+    'Faça um resumo da situação atual da manutenção.',
   ];
 
   return (
-    <div>
-      <PageHeader title="Assistente IA" subtitle="Consulte dados do sistema usando linguagem natural" />
+    <div className="space-y-6">
+      <PageHeader title="Assistente IA de Consulta" subtitle="Motor de consulta inteligente em tempo real sobre a base de dados do sistema" />
 
-      <Card className="flex flex-col h-[calc(100vh-220px)] min-h-[400px]">
-        {/* Messages */}
+      <Card className="flex flex-col h-[calc(100vh-230px)] min-h-[460px] border border-gray-200">
+        {/* Messages list */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {messages.length === 0 && (
             <div className="text-center py-8">
-              <BrainCircuit size={48} className="mx-auto text-blue-300 mb-4" />
-              <h3 className="text-lg font-medium text-gray-700 mb-2">Como posso ajudar?</h3>
-              <p className="text-sm text-gray-500 mb-4">Faça perguntas sobre os dados do sistema</p>
-              <div className="flex flex-wrap gap-2 justify-center max-w-lg mx-auto">
+              <div className="w-14 h-14 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4 font-bold">
+                <BrainCircuit size={32} />
+              </div>
+              <h3 className="text-lg font-bold text-gray-800 mb-2">Consulta Inteligente aos Dados</h3>
+              <p className="text-xs text-gray-500 mb-6 max-w-md mx-auto">
+                Selecione uma das perguntas rápidas abaixo para consultar o estado atual dos equipamentos, manutenções, matriz GUT e prazos 5W2H.
+              </p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 max-w-3xl mx-auto text-left">
                 {suggestions.map((s, i) => (
-                  <button key={i} onClick={() => { setInput(s); }} className="px-3 py-1.5 bg-blue-50 text-blue-700 rounded-full text-xs hover:bg-blue-100 transition-colors">
-                    {s}
+                  <button
+                    key={i}
+                    onClick={() => {
+                      const userMsg: Message = { role: 'user', content: s };
+                      const result = processQuery(s);
+                      const assistantMsg: Message = { role: 'assistant', content: result.content, actionLinks: result.actionLinks };
+                      setMessages([userMsg, assistantMsg]);
+                    }}
+                    className="p-3 bg-slate-50 hover:bg-blue-50 border border-gray-200 hover:border-blue-300 rounded-xl text-xs font-semibold text-gray-700 hover:text-blue-700 transition-all flex items-center justify-between group"
+                  >
+                    <span>{s}</span>
+                    <ArrowRight size={14} className="text-gray-400 group-hover:text-blue-600 group-hover:translate-x-1 transition-transform shrink-0 ml-2" />
                   </button>
                 ))}
               </div>
             </div>
           )}
+
           {messages.map((m, i) => (
             <div key={i} className={`flex gap-3 ${m.role === 'user' ? 'justify-end' : ''}`}>
-              {m.role === 'assistant' && <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center shrink-0"><Bot size={16} className="text-blue-600" /></div>}
-              <div className={`max-w-[80%] px-4 py-2.5 rounded-2xl text-sm whitespace-pre-line ${m.role === 'user' ? 'bg-blue-600 text-white rounded-br-sm' : 'bg-gray-100 text-gray-800 rounded-bl-sm'}`}>
-                {m.content}
+              {m.role === 'assistant' && (
+                <div className="w-8 h-8 bg-blue-600 text-white rounded-xl flex items-center justify-center shrink-0 shadow-sm">
+                  <Bot size={18} />
+                </div>
+              )}
+
+              <div className={`max-w-[85%] px-4 py-3 rounded-2xl text-xs leading-relaxed ${
+                m.role === 'user'
+                  ? 'bg-blue-600 text-white font-medium rounded-br-sm shadow-sm'
+                  : 'bg-slate-100 text-gray-800 rounded-bl-sm border border-gray-200'
+              }`}>
+                <div className="whitespace-pre-line">{m.content}</div>
+
+                {m.actionLinks && m.actionLinks.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mt-3 pt-2 border-t border-gray-200">
+                    {m.actionLinks.map((link, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => navigate(link.path)}
+                        className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-700 transition-colors shadow-sm inline-flex items-center gap-1"
+                      >
+                        {link.label} <ArrowRight size={12} />
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
-              {m.role === 'user' && <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center shrink-0"><User size={16} className="text-gray-600" /></div>}
+
+              {m.role === 'user' && (
+                <div className="w-8 h-8 bg-gray-700 text-white rounded-xl flex items-center justify-center shrink-0 shadow-sm">
+                  <User size={18} />
+                </div>
+              )}
             </div>
           ))}
         </div>
 
-        {/* Input */}
-        <div className="p-4 border-t border-gray-200">
+        {/* Input Bar */}
+        <div className="p-4 border-t border-gray-200 bg-white">
           <div className="flex gap-2">
             <input
               type="text"
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleSend()}
-              placeholder="Pergunte algo sobre o sistema..."
-              className="flex-1 px-4 py-2.5 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+              placeholder="Digite sua dúvida (ex: Manutenções atrasadas, Equipamentos em manutenção...)"
+              className="flex-1 px-4 py-2.5 border border-gray-300 rounded-xl text-xs focus:ring-2 focus:ring-blue-500 outline-none"
             />
-            <Button onClick={handleSend}><Send size={18} /></Button>
+            <Button onClick={handleSend}>
+              <Send size={16} />
+            </Button>
           </div>
-          <p className="text-xs text-gray-400 mt-2 text-center">
-            A IA utiliza dados reais do sistema. Integração com API de linguagem natural pode ser configurada futuramente.
-          </p>
         </div>
       </Card>
     </div>

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { db, hashPassword } from '../store';
+import { db } from '../store';
 import { useAuth } from '../contexts/AuthContext';
 import { PageHeader, Button, Modal, Input, Select, SearchInput, EmptyState, Card, showToast, ConfirmDialog, Badge } from '../components/ui';
 import { Plus, Users, Edit2, Trash2, Shield } from 'lucide-react';
@@ -28,13 +28,12 @@ export default function UsersPage() {
 
     if (editing) {
       const update: Partial<User> = { name: form.name, email: form.email, role: form.role };
-      if (form.password) update.passwordHash = hashPassword(form.password);
       db.updateUser(editing.id, update);
       showToast('success', 'Usuário atualizado');
     } else {
       const existing = db.getUserByEmail(form.email);
       if (existing) { showToast('error', 'E-mail já cadastrado'); return; }
-      db.createUser({ name: form.name, email: form.email, passwordHash: hashPassword(form.password), role: form.role });
+      db.createUser({ name: form.name, email: form.email, passwordHash: '', role: form.role });
       showToast('success', 'Usuário criado');
     }
     setUsers(db.getUsers());

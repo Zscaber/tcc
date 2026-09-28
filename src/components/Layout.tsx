@@ -4,23 +4,43 @@ import { db } from '../store';
 import { LayoutDashboard, FolderKanban, Users, Wrench, AlertTriangle, BrainCircuit, BarChart3, ClipboardList, Settings, Bell, LogOut, Menu, X, Search, FileText, History, Map, ChevronDown } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 
-const navItems = [
-  { path: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { path: '/projects', label: 'Projetos', icon: FolderKanban },
-  { path: '/people', label: 'Pessoas', icon: Users },
-  { path: '/equipment', label: 'Equipamentos', icon: Wrench },
-  { path: '/problems', label: 'Problemas', icon: AlertTriangle },
-  { path: '/gut', label: 'Matriz GUT', icon: BarChart3 },
-  { path: '/action-plans', label: 'Planos 5W2H', icon: ClipboardList },
-  { path: '/maintenance', label: 'Manutenção', icon: Settings },
-  { path: '/production', label: 'Produção', icon: FileText },
-  { path: '/quality', label: 'Qualidade', icon: BarChart3 },
-  { path: '/layout', label: 'Mapa de Áreas', icon: Map },
-  { path: '/ai-assistant', label: 'Assistente IA', icon: BrainCircuit },
-  { path: '/notifications', label: 'Notificações', icon: Bell },
-  { path: '/history', label: 'Histórico', icon: History },
-  { path: '/reports', label: 'Relatórios', icon: FileText },
-  { path: '/users', label: 'Usuários', icon: Users },
+const navGroups = [
+  {
+    category: 'GESTÃO',
+    items: [
+      { path: '/', label: 'Dashboard', icon: LayoutDashboard },
+      { path: '/projects', label: 'Projetos', icon: FolderKanban },
+      { path: '/people', label: 'Pessoas', icon: Users },
+    ],
+  },
+  {
+    category: 'MANUTENÇÃO',
+    items: [
+      { path: '/equipment', label: 'Equipamentos', icon: Wrench },
+      { path: '/problems', label: 'Problemas', icon: AlertTriangle },
+      { path: '/gut', label: 'Matriz GUT', icon: BarChart3 },
+      { path: '/action-plans', label: 'Planos 5W2H', icon: ClipboardList },
+      { path: '/maintenance', label: 'Manutenção', icon: Settings },
+    ],
+  },
+  {
+    category: 'OPERAÇÃO',
+    items: [
+      { path: '/production', label: 'Produção', icon: FileText },
+      { path: '/quality', label: 'Qualidade', icon: BarChart3 },
+      { path: '/layout', label: 'Mapa de Áreas', icon: Map },
+    ],
+  },
+  {
+    category: 'INTELIGÊNCIA & SISTEMA',
+    items: [
+      { path: '/ai-assistant', label: 'Assistente IA', icon: BrainCircuit },
+      { path: '/notifications', label: 'Notificações', icon: Bell },
+      { path: '/history', label: 'Histórico', icon: History },
+      { path: '/reports', label: 'Relatórios', icon: FileText },
+      { path: '/users', label: 'Usuários', icon: Users },
+    ],
+  },
 ];
 
 export default function Layout({ children }: { children: React.ReactNode }) {
@@ -61,26 +81,33 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           </div>
 
           {/* Nav */}
-          <nav className="flex-1 overflow-y-auto py-4 px-3">
-            <div className="space-y-1">
-              {navItems.map(item => {
-                const Icon = item.icon;
-                const isActive = location.pathname === item.path || (item.path !== '/' && location.pathname.startsWith(item.path));
-                return (
-                  <Link
-                    key={item.path}
-                    to={item.path}
-                    onClick={() => setSidebarOpen(false)}
-                    className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${isActive ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-800'}`}
-                  >
-                    <Icon size={18} />
-                    <span>{item.label}</span>
-                    {item.path === '/notifications' && unreadCount > 0 && (
-                      <span className="ml-auto bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">{unreadCount}</span>
-                    )}
-                  </Link>
-                );
-              })}
+          <nav className="flex-1 overflow-y-auto py-3 px-3">
+            <div className="space-y-4">
+              {navGroups.map(group => (
+                <div key={group.category}>
+                  <div className="px-3 mb-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider">{group.category}</div>
+                  <div className="space-y-0.5">
+                    {group.items.map(item => {
+                      const Icon = item.icon;
+                      const isActive = location.pathname === item.path || (item.path !== '/' && location.pathname.startsWith(item.path));
+                      return (
+                        <Link
+                          key={item.path}
+                          to={item.path}
+                          onClick={() => setSidebarOpen(false)}
+                          className={`flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold transition-colors ${isActive ? 'bg-blue-50 text-blue-700 font-bold' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-800'}`}
+                        >
+                          <Icon size={16} />
+                          <span>{item.label}</span>
+                          {item.path === '/notifications' && unreadCount > 0 && (
+                            <span className="ml-auto bg-red-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">{unreadCount}</span>
+                          )}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
             </div>
           </nav>
 

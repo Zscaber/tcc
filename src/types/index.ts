@@ -38,6 +38,8 @@ export interface Project {
 
 export type EquipmentStatus = 'operating' | 'maintenance' | 'stopped' | 'out_of_service';
 
+export type CriticalityLevel = 'baixa' | 'media' | 'alta' | 'critica';
+
 export interface Equipment {
   id: string;
   name: string;
@@ -50,6 +52,7 @@ export interface Equipment {
   location: string;
   responsibleId: string;
   status: EquipmentStatus;
+  criticality?: CriticalityLevel;
   acquisitionDate: string;
   lastMaintenance: string;
   nextMaintenance: string;
@@ -110,6 +113,8 @@ export type MaintenanceStatus = 'scheduled' | 'in_progress' | 'completed' | 'ove
 export interface MaintenanceRecord {
   id: string;
   equipmentId: string;
+  problemId?: string;
+  actionPlanId?: string;
   type: MaintenanceType;
   description: string;
   responsibleId: string;
@@ -126,6 +131,7 @@ export interface ProductionActivity {
   title: string;
   description: string;
   projectId: string;
+  equipmentId?: string;
   sector: string;
   responsibleId: string;
   deadline: string;
@@ -141,6 +147,9 @@ export interface NonConformity {
   cause: string;
   responsibleId: string;
   projectId: string;
+  equipmentId?: string;
+  sector?: string;
+  severity?: CriticalityLevel;
   problemId: string;
   actionPlanId: string;
   status: 'identified' | 'analyzing' | 'treating' | 'resolved' | 'cancelled';

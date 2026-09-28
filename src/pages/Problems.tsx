@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
 import { db } from '../store';
 import { useAuth } from '../contexts/AuthContext';
-import { PageHeader, Button, Modal, Input, Select, Textarea, StatusBadge, SearchInput, EmptyState, Card, showToast, ConfirmDialog } from '../components/ui';
-import { Plus, AlertTriangle, Edit2, Trash2, BarChart3, ClipboardList } from 'lucide-react';
-import { useSearchParams, Link } from 'react-router-dom';
+import { PageHeader, Button, Modal, Input, Select, Textarea, StatusBadge, SearchInput, EmptyState, Card, showToast, ConfirmDialog, Badge } from '../components/ui';
+import { Plus, AlertTriangle, Edit2, Trash2, BarChart3, ClipboardList, Settings, ArrowRight, Wrench, CheckCircle } from 'lucide-react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Problem, ProblemCategory, ProblemStatus } from '../types';
 
 export default function Problems() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const projectFilter = searchParams.get('project') || '';
   const [items, setItems] = useState(db.getProblems());
@@ -17,9 +18,13 @@ export default function Problems() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Problem | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+
   const people = db.getPeople();
   const projects = db.getProjects();
   const equipment = db.getEquipment();
+  const gutAnalyses = db.getGutAnalyses();
+  const actionPlans = db.getActionPlans();
+  const maintenanceRecords = db.getMaintenanceRecords();
 
   const emptyForm = { title: '', description: '', category: 'maintenance' as ProblemCategory, projectId: projectFilter, equipmentId: '', sector: '', responsibleId: '', identificationDate: new Date().toISOString().split('T')[0], status: 'identified' as ProblemStatus, notes: '' };
   const [form, setForm] = useState(emptyForm);
@@ -35,7 +40,7 @@ export default function Problems() {
   const openEdit = (p: Problem) => { setEditing(p); setForm({ title: p.title, description: p.description, category: p.category, projectId: p.projectId, equipmentId: p.equipmentId, sector: p.sector, responsibleId: p.responsibleId, identificationDate: p.identificationDate, status: p.status, notes: p.notes }); setModalOpen(true); };
 
   const handleSave = () => {
-    if (!form.title) { showToast('error', 'Título é obrigatório'); return; }
+    if (!form.title.trim()) { showToast('error', 'Título é obrigatório'); return; }
     if (editing) {
       db.updateProblem(editing.id, form);
       db.addHistory({ userId: user!.id, action: 'Problema atualizado', entity: 'problem', entityId: editing.id, details: form.title });
@@ -58,15 +63,18 @@ export default function Problems() {
   };
 
   const categoryLabels: Record<string, string> = { maintenance: 'Manutenção', production: 'Produção', quality: 'Qualidade', safety: 'Segurança', other: 'Outro' };
-  const categoryColors: Record<string, string> = { maintenance: 'orange', production: 'blue', quality: 'purple', safety: 'red', other: 'gray' };
 
   return (
-    <div>
-      <PageHeader title="Problemas e Ocorrências" subtitle="Registro e acompanhamento de problemas" actions={<Button onClick={openCreate}><Plus size={16} className="inline mr-1" /> Novo Problema</Button>} />
+    <div className="space-y-6">
+      <PageHeader
+        title="Problemas e Ocorrências"
+        subtitle="Registro e acompanhamento com integração à Matriz GUT, Planos 5W2H e Manutenções"
+        actions={<Button onClick={openCreate}><Plus size={16} className="inline mr-1" /> Novo Problema</Button>}
+      />
 
-      <div className="flex flex-col sm:flex-row gap-3 mb-4">
+      <div className="flex flex-col sm:flex-row gap-3">
         <SearchInput value={search} onChange={setSearch} placeholder="Pesquisar problemas..." />
-        <Select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="w-40">
+        <Select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="w-40 text-xs">
           <option value="">Todos status</option>
           <option value="identified">Identificado</option>
           <option value="analyzing">Em Análise</option>
@@ -74,7 +82,7 @@ export default function Problems() {
           <option value="resolved">Resolvido</option>
           <option value="cancelled">Cancelado</option>
         </Select>
-        <Select value={filterCategory} onChange={e => setFilterCategory(e.target.value)} className="w-40">
+        <Select value={filterCategory} onChange={e => setFilterCategory(e.target.value)} className="w-40 text-xs">
           <option value="">Todas categorias</option>
           <option value="maintenance">Manutenção</option>
           <option value="production">Produção</option>
@@ -85,37 +93,108 @@ export default function Problems() {
       </div>
 
       {filtered.length === 0 ? (
-        <EmptyState icon={<AlertTriangle size={48} />} title="Nenhum problema registrado" description="Registre o primeiro problema para começar o acompanhamento." action={<Button onClick={openCreate}>Registrar Problema</Button>} />
+        <EmptyState icon={<AlertTriangle size={48} />} title="Nenhum problema registrado" description="Registre o primeiro problema para começar o acompanhamento e análise." action={<Button onClick={openCreate}>Registrar Problema</Button>} />
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-4">
           {filtered.map(p => {
-            const gut = db.getGutByProblem(p.id);
+            const gut = gutAnalyses.find(g => g.problemId === p.id);
+            const ap = actionPlans.find(a => a.problemId === p.id);
+            const maint = maintenanceRecords.find(m => m.problemId === p.id);
             const eq = equipment.find(e => e.id === p.equipmentId);
             const proj = projects.find(pr => pr.id === p.projectId);
+
             return (
-              <Card key={p.id} className="p-4">
-                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 flex-wrap mb-1">
-                      <h3 className="font-semibold text-gray-800">{p.title}</h3>
+              <Card key={p.id} className="p-5 border border-gray-200 hover:shadow-md transition-shadow">
+                <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
+                  
+                  {/* Info Column */}
+                  <div className="flex-1 space-y-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="font-bold text-gray-800 text-base">{p.title}</h3>
                       <StatusBadge status={p.status} />
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-${categoryColors[p.category]}-100 text-${categoryColors[p.category]}-700`}>{categoryLabels[p.category]}</span>
-                      {gut && <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full">GUT: {gut.score}</span>}
+                      <Badge color="blue">{categoryLabels[p.category] || p.category}</Badge>
+                      {gut && (
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                          gut.score >= 60 ? 'bg-red-100 text-red-800 border border-red-200' : 'bg-amber-100 text-amber-800'
+                        }`}>
+                          GUT Score: {gut.score} ({gut.classification})
+                        </span>
+                      )}
                     </div>
-                    <p className="text-sm text-gray-600 mb-2">{p.description}</p>
-                    <div className="flex flex-wrap gap-3 text-xs text-gray-500">
+
+                    <p className="text-sm text-gray-600 leading-relaxed">{p.description}</p>
+
+                    <div className="flex flex-wrap gap-4 text-xs text-gray-500 pt-1">
+                      {eq && <span className="flex items-center gap-1 font-semibold text-gray-700"><Wrench size={13} className="text-blue-600" /> Equipamento: {eq.name} ({eq.code})</span>}
                       {proj && <span>Projeto: {proj.name}</span>}
-                      {eq && <span>Equipamento: {eq.name}</span>}
                       {p.sector && <span>Setor: {p.sector}</span>}
                       <span>Responsável: {people.find(pe => pe.id === p.responsibleId)?.name || '—'}</span>
-                      <span>Data: {p.identificationDate}</span>
+                      <span>Identificado em: {p.identificationDate}</span>
+                    </div>
+
+                    {/* Integrated Records Bar */}
+                    <div className="pt-3 flex flex-wrap gap-2 border-t border-gray-100 mt-2">
+                      {/* GUT Status & Button */}
+                      {gut ? (
+                        <button
+                          onClick={() => navigate(`/gut`)}
+                          className="px-2.5 py-1 bg-purple-50 text-purple-700 border border-purple-200 rounded-lg text-xs font-semibold hover:bg-purple-100 transition-colors flex items-center gap-1"
+                        >
+                          <BarChart3 size={13} /> GUT: {gut.score} ({gut.classification}) — Ver Análise
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => navigate(`/gut`)}
+                          className="px-2.5 py-1 bg-gray-50 text-gray-600 border border-gray-200 rounded-lg text-xs font-medium hover:bg-gray-100 transition-colors flex items-center gap-1"
+                        >
+                          <BarChart3 size={13} /> + Criar Análise GUT
+                        </button>
+                      )}
+
+                      {/* 5W2H Status & Button */}
+                      {ap ? (
+                        <button
+                          onClick={() => navigate(`/action-plans`)}
+                          className="px-2.5 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg text-xs font-semibold hover:bg-blue-100 transition-colors flex items-center gap-1"
+                        >
+                          <ClipboardList size={13} /> Plano 5W2H: {ap.what} — Ver Plano
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => navigate(`/action-plans`)}
+                          className="px-2.5 py-1 bg-gray-50 text-gray-600 border border-gray-200 rounded-lg text-xs font-medium hover:bg-gray-100 transition-colors flex items-center gap-1"
+                        >
+                          <ClipboardList size={13} /> + Criar Plano 5W2H
+                        </button>
+                      )}
+
+                      {/* Maintenance Status & Button */}
+                      {maint ? (
+                        <button
+                          onClick={() => navigate(`/maintenance`)}
+                          className="px-2.5 py-1 bg-amber-50 text-amber-800 border border-amber-200 rounded-lg text-xs font-semibold hover:bg-amber-100 transition-colors flex items-center gap-1"
+                        >
+                          <Settings size={13} /> Manutenção: {maint.description} — Ver Manutenção
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => navigate(`/maintenance`)}
+                          className="px-2.5 py-1 bg-gray-50 text-gray-600 border border-gray-200 rounded-lg text-xs font-medium hover:bg-gray-100 transition-colors flex items-center gap-1"
+                        >
+                          <Settings size={13} /> + Agendar Manutenção
+                        </button>
+                      )}
                     </div>
                   </div>
-                  <div className="flex gap-1 shrink-0">
-                    <Link to={`/gut?problem=${p.id}`}><Button variant="ghost" size="sm" title="Análise GUT"><BarChart3 size={14} /></Button></Link>
-                    <Link to={`/action-plans?problem=${p.id}`}><Button variant="ghost" size="sm" title="Plano 5W2H"><ClipboardList size={14} /></Button></Link>
-                    <Button variant="ghost" size="sm" onClick={() => openEdit(p)}><Edit2 size={14} /></Button>
-                    <Button variant="ghost" size="sm" onClick={() => setDeleteConfirm(p.id)}><Trash2 size={14} className="text-red-500" /></Button>
+
+                  {/* Actions Column */}
+                  <div className="flex sm:flex-row lg:flex-col gap-2 shrink-0 border-t lg:border-t-0 pt-3 lg:pt-0">
+                    <Button variant="secondary" size="sm" onClick={() => openEdit(p)}>
+                      <Edit2 size={14} className="inline mr-1" /> Editar
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => setDeleteConfirm(p.id)}>
+                      <Trash2 size={14} className="text-red-500 inline mr-1" /> Excluir
+                    </Button>
                   </div>
                 </div>
               </Card>
@@ -124,6 +203,7 @@ export default function Problems() {
         </div>
       )}
 
+      {/* Modal Form */}
       <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)} title={editing ? 'Editar Problema' : 'Novo Problema'} size="lg">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="md:col-span-2"><Input label="Título *" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} /></div>
@@ -164,7 +244,7 @@ export default function Problems() {
         </div>
       </Modal>
 
-      <ConfirmDialog isOpen={!!deleteConfirm} onClose={() => setDeleteConfirm(null)} onConfirm={() => deleteConfirm && handleDelete(deleteConfirm)} title="Excluir Problema" message="Tem certeza? A análise GUT associada também será removida." />
+      <ConfirmDialog isOpen={!!deleteConfirm} onClose={() => setDeleteConfirm(null)} onConfirm={() => deleteConfirm && handleDelete(deleteConfirm)} title="Excluir Problema" message="Tem certeza? A análise GUT e referências associadas serão limpas." />
     </div>
   );
 }

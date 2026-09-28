@@ -8,6 +8,7 @@ import {
   Layers, Tag, Type, ShieldAlert, Cpu, Move, Check, Info, FileText, Settings, X, PlusCircle
 } from 'lucide-react';
 import { Layout, LayoutElement, MapElementType, PhotoPoint, AreaPhoto, Equipment, MaintenanceRecord } from '../types';
+import { useNavigate } from 'react-router-dom';
 
 // Palette Item Definition
 interface LibraryItem {
@@ -747,9 +748,32 @@ function AreaEditorModal({ areaId, onClose }: { areaId: string; onClose: () => v
                         </span>
 
                         {linkedEq && (
-                          <span className="text-[9px] bg-black/40 text-white px-1 rounded truncate max-w-[90%]">
-                            {linkedEq.code}
-                          </span>
+                          <div className="flex items-center gap-1 mt-0.5 max-w-[90%] truncate">
+                            <span
+                              className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                                hasPendingMaintenance || linkedEq.status === 'maintenance'
+                                  ? 'bg-red-500 animate-ping'
+                                  : linkedEq.status === 'operating'
+                                  ? 'bg-green-400'
+                                  : 'bg-amber-400'
+                              }`}
+                              title={linkedEq.status}
+                            />
+                            <span className="text-[9px] bg-black/50 text-white px-1 rounded truncate">
+                              {linkedEq.code}
+                            </span>
+                            {linkedEq.criticality && (
+                              <span className={`text-[8px] px-1 rounded font-bold uppercase ${
+                                linkedEq.criticality === 'critica'
+                                  ? 'bg-red-700 text-white'
+                                  : linkedEq.criticality === 'alta'
+                                  ? 'bg-amber-600 text-white'
+                                  : 'bg-blue-600 text-white'
+                              }`}>
+                                {linkedEq.criticality === 'critica' ? 'CRIT' : linkedEq.criticality === 'alta' ? 'ALT' : 'MED'}
+                              </span>
+                            )}
+                          </div>
                         )}
                       </div>
 
@@ -955,6 +979,7 @@ function AreaEditorModal({ areaId, onClose }: { areaId: string; onClose: () => v
 // =========================================================
 
 function EquipmentInspectDrawer({ equipmentId, onClose }: { equipmentId: string; onClose: () => void }) {
+  const navigate = useNavigate();
   const equipment = db.getEquipmentById(equipmentId);
   const maintenanceRecords = db.getMaintenanceRecords().filter(m => m.equipmentId === equipmentId);
   const [showNewMaintModal, setShowNewMaintModal] = useState(false);
@@ -981,6 +1006,13 @@ function EquipmentInspectDrawer({ equipmentId, onClose }: { equipmentId: string;
     setMaintDesc('');
   };
 
+  const criticalityColors: Record<string, string> = {
+    critica: 'bg-red-100 text-red-700 border-red-200',
+    alta: 'bg-amber-100 text-amber-700 border-amber-200',
+    media: 'bg-blue-100 text-blue-700 border-blue-200',
+    baixa: 'bg-green-100 text-green-700 border-green-200',
+  };
+
   return (
     <Modal isOpen={true} onClose={onClose} title={`Ficha do Equipamento: ${equipment.name}`} size="lg">
       <div className="space-y-4">
@@ -994,9 +1026,14 @@ function EquipmentInspectDrawer({ equipmentId, onClose }: { equipmentId: string;
           )}
 
           <div className="flex-1">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <h3 className="font-bold text-lg text-gray-800">{equipment.name}</h3>
               <StatusBadge status={equipment.status} />
+              {equipment.criticality && (
+                <span className={`text-[11px] font-bold px-2 py-0.5 rounded border uppercase ${criticalityColors[equipment.criticality] || 'bg-gray-100 text-gray-700'}`}>
+                  Criticidade: {equipment.criticality}
+                </span>
+              )}
             </div>
             <p className="text-xs text-gray-500 font-mono mt-0.5">Código: {equipment.code} | Setor: {equipment.sector}</p>
             <p className="text-xs text-gray-600 mt-2">
@@ -1039,8 +1076,30 @@ function EquipmentInspectDrawer({ equipmentId, onClose }: { equipmentId: string;
         </div>
       </div>
 
-      <div className="flex justify-end gap-3 mt-6">
-        <Button variant="secondary" onClick={onClose}>Fechar</Button>
+      <div className="flex flex-wrap items-center justify-between gap-3 mt-6 pt-3 border-t border-gray-100">
+        <div className="flex gap-2">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => {
+              onClose();
+              navigate('/equipment');
+            }}
+          >
+            <Wrench size={14} className="inline mr-1 text-blue-600" /> Ver no Módulo Equipamentos
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => {
+              onClose();
+              navigate('/maintenance');
+            }}
+          >
+            <Settings size={14} className="inline mr-1 text-gray-600" /> Ver no Módulo Manutenção
+          </Button>
+        </div>
+        <Button variant="primary" onClick={onClose}>Fechar</Button>
       </div>
 
       {/* Modal Nova Manutenção rápida */}

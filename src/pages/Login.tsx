@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { Wrench, Eye, EyeOff } from 'lucide-react';
 import { db } from '../store';
+import { isSupabaseConfigured } from '../lib/supabase';
 
 export default function Login() {
   const { login, register } = useAuth();
@@ -14,24 +15,33 @@ export default function Login() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
+  const [loading, setLoading] = useState(false);
+
   React.useEffect(() => {
-    db.loadDemoData();
+    if (!isSupabaseConfigured()) {
+      db.loadDemoData();
+    }
   }, []);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setSuccess('');
+    setLoading(true);
 
-    if (isRegister) {
-      if (!name || !email || !password) { setError('Preencha todos os campos'); return; }
-      if (password.length < 6) { setError('Senha deve ter pelo menos 6 caracteres'); return; }
-      const err = register({ name, email, password, role });
-      if (err) setError(err);
-    } else {
-      if (!email || !password) { setError('Preencha todos os campos'); return; }
-      const err = login(email, password);
-      if (err) setError(err);
+    try {
+      if (isRegister) {
+        if (!name || !email || !password) { setError('Preencha todos os campos'); setLoading(false); return; }
+        if (password.length < 6) { setError('Senha deve ter pelo menos 6 caracteres'); setLoading(false); return; }
+        const err = await register({ name, email, password, role });
+        if (err) setError(err);
+      } else {
+        if (!email || !password) { setError('Preencha todos os campos'); setLoading(false); return; }
+        const err = await login(email, password);
+        if (err) setError(err);
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -91,8 +101,8 @@ export default function Login() {
               </div>
             </div>
 
-            <button type="submit" className="w-full py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors">
-              {isRegister ? 'Criar Conta' : 'Entrar'}
+            <button type="submit" disabled={loading} className="w-full py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-60">
+              {loading ? 'Processando...' : isRegister ? 'Criar Conta' : 'Entrar'}
             </button>
           </form>
 
