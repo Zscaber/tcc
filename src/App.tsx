@@ -16,6 +16,8 @@ import Maintenance from './pages/Maintenance';
 import Production from './pages/Production';
 import Quality from './pages/Quality';
 import LayoutPage from './pages/LayoutPage';
+import AreaMaps from './pages/AreaMaps';
+import AreaMapEditor from './pages/AreaMapEditor';
 import AIAssistant from './pages/AIAssistant';
 import Notifications from './pages/Notifications';
 import HistoryPage from './pages/History';
@@ -71,6 +73,8 @@ function AppRoutes() {
       <Route path="/production" element={<ProtectedRoute><Production /></ProtectedRoute>} />
       <Route path="/quality" element={<ProtectedRoute><Quality /></ProtectedRoute>} />
       <Route path="/layout" element={<ProtectedRoute><LayoutPage /></ProtectedRoute>} />
+      <Route path="/area-maps" element={<ProtectedRoute><AreaMaps /></ProtectedRoute>} />
+      <Route path="/area-maps/:id" element={<ProtectedRoute><AreaMapEditor /></ProtectedRoute>} />
       <Route path="/ai-assistant" element={<ProtectedRoute><AIAssistant /></ProtectedRoute>} />
       <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
       <Route path="/history" element={<ProtectedRoute><HistoryPage /></ProtectedRoute>} />
