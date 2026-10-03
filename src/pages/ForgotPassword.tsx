@@ -128,7 +128,7 @@ export default function ForgotPassword() {
         </div>
 
         <p className="text-center text-blue-200 text-xs mt-6">
-          © 2025 Manutenção Flexível — Projeto TCC
+          © 2026 Manutenção Flexível — Projeto TCC
         </p>
       </div>
     </div>
