@@ -24,6 +24,8 @@ import HistoryPage from './pages/History';
 import Reports from './pages/Reports';
 import UsersPage from './pages/Users';
 import SearchPage from './pages/Search';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
@@ -61,6 +63,8 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
+      <Route path="/forgot-password" element={<PublicRoute><ForgotPassword /></PublicRoute>} />
+      <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
       <Route path="/projects" element={<ProtectedRoute><Projects /></ProtectedRoute>} />
       <Route path="/projects/:id" element={<ProtectedRoute><ProjectDetail /></ProtectedRoute>} />

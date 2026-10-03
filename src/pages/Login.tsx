@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Wrench, Eye, EyeOff } from 'lucide-react';
 import { db } from '../store';
@@ -105,6 +106,14 @@ export default function Login() {
               {loading ? 'Processando...' : isRegister ? 'Criar Conta' : 'Entrar'}
             </button>
           </form>
+
+          {!isRegister && (
+            <div className="mt-3 text-center">
+              <Link to="/forgot-password" className="text-sm text-gray-500 hover:text-blue-600 transition-colors">
+                Esqueci minha senha
+              </Link>
+            </div>
+          )}
 
           <div className="mt-6 text-center">
             <button onClick={() => { setIsRegister(!isRegister); setError(''); }} className="text-sm text-blue-600 hover:text-blue-700 font-medium">
