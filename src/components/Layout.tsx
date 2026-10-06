@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../store';
-import { LayoutDashboard, FolderKanban, Users, Wrench, AlertTriangle, BrainCircuit, BarChart3, ClipboardList, Settings, Bell, LogOut, Menu, X, Search, FileText, History, Map, ChevronDown } from 'lucide-react';
+import { LayoutDashboard, FolderKanban, Users, Wrench, AlertTriangle, BrainCircuit, BarChart3, ClipboardList, Settings, Bell, LogOut, Menu, X, Search, FileText, History, Map, ChevronDown, Calendar } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 
 const navGroups = [
@@ -9,6 +9,7 @@ const navGroups = [
     category: 'GESTÃO',
     items: [
       { path: '/', label: 'Dashboard', icon: LayoutDashboard },
+      { path: '/schedule', label: 'Cronograma', icon: Calendar },
       { path: '/projects', label: 'Projetos', icon: FolderKanban },
       { path: '/people', label: 'Pessoas', icon: Users },
     ],
