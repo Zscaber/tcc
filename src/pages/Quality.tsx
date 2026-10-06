@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { PageHeader, Button, Modal, Input, Select, Textarea, StatusBadge, SearchInput, EmptyState, Card, showToast, ConfirmDialog, Badge } from '../components/ui';
 import { Plus, BarChart3, Edit2, Trash2, Wrench } from 'lucide-react';
 import { NonConformity, CriticalityLevel } from '../types';
+import { Permissions } from '../lib/permissions';
 
 export default function Quality() {
   const { user } = useAuth();
@@ -13,6 +14,9 @@ export default function Quality() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<NonConformity | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+
+  const canManage = Permissions.canManageQuality(user);
+  const canDelete = Permissions.canDeleteQuality(user);
 
   const people = db.getPeople();
   const projects = db.getProjects();
@@ -90,7 +94,7 @@ export default function Quality() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Qualidade" subtitle="Gestão de Não Conformidades integrada a Equipamentos e Planos de Ação" actions={<Button onClick={openCreate}><Plus size={16} className="inline mr-1" /> Nova Não Conformidade</Button>} />
+      <PageHeader title="Qualidade" subtitle="Gestão de Não Conformidades integrada a Equipamentos e Planos de Ação" actions={canManage ? <Button onClick={openCreate}><Plus size={16} className="inline mr-1" /> Nova Não Conformidade</Button> : undefined} />
 
       <div className="flex flex-col sm:flex-row gap-3">
         <SearchInput value={search} onChange={setSearch} placeholder="Pesquisar por título ou causa..." />
@@ -105,7 +109,7 @@ export default function Quality() {
       </div>
 
       {filtered.length === 0 ? (
-        <EmptyState icon={<BarChart3 size={48} />} title="Nenhuma não conformidade registrada" description="Registre ocorrências de qualidade para controle e planos de tratamento." action={<Button onClick={openCreate}>Registrar Não Conformidade</Button>} />
+        <EmptyState icon={<BarChart3 size={48} />} title="Nenhuma não conformidade registrada" description="Registre ocorrências de qualidade para controle e planos de tratamento." action={canManage ? <Button onClick={openCreate}>Registrar Não Conformidade</Button> : undefined} />
       ) : (
         <div className="space-y-3">
           {filtered.map(n => {
@@ -139,8 +143,16 @@ export default function Quality() {
                   </div>
 
                   <div className="flex gap-1 shrink-0">
-                    <Button variant="ghost" size="sm" onClick={() => openEdit(n)}><Edit2 size={14} /></Button>
-                    <Button variant="ghost" size="sm" onClick={() => setDeleteConfirm(n.id)}><Trash2 size={14} className="text-red-500" /></Button>
+                    {canManage && (
+                      <Button variant="ghost" size="sm" onClick={() => openEdit(n)} title="Editar">
+                        <Edit2 size={14} />
+                      </Button>
+                    )}
+                    {canDelete && (
+                      <Button variant="ghost" size="sm" onClick={() => setDeleteConfirm(n.id)} title="Excluir">
+                        <Trash2 size={14} className="text-red-500" />
+                      </Button>
+                    )}
                   </div>
                 </div>
               </Card>

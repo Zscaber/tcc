@@ -5,6 +5,7 @@ import { PageHeader, Button, Modal, Input, Textarea, EmptyState, Card, showToast
 import { Plus, MapPin, Edit2, Trash2, Eye, Ruler, FileImage } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { AreaMap } from '../types';
+import { Permissions } from '../lib/permissions';
 
 export default function AreaMaps() {
   const { user } = useAuth();
@@ -14,6 +15,9 @@ export default function AreaMaps() {
   const [editing, setEditing] = useState<AreaMap | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [form, setForm] = useState({ name: '', description: '', width: 20, length: 15 });
+
+  const canManage = Permissions.canManageAreaMaps(user);
+  const canDelete = Permissions.canDeleteAreaMaps(user);
 
   const openCreate = () => { setEditing(null); setForm({ name: '', description: '', width: 20, length: 15 }); setModalOpen(true); };
   const openEdit = (a: AreaMap) => { setEditing(a); setForm({ name: a.name, description: a.description, width: a.width, length: a.length }); setModalOpen(true); };
@@ -44,14 +48,14 @@ export default function AreaMaps() {
 
   return (
     <div>
-      <PageHeader title="Mapa de Áreas" subtitle="Mapeamento visual de ambientes industriais" actions={<Button onClick={openCreate}><Plus size={16} className="inline mr-1" /> Nova Área</Button>} />
+      <PageHeader title="Mapa de Áreas" subtitle="Mapeamento visual de ambientes industriais" actions={canManage ? <Button onClick={openCreate}><Plus size={16} className="inline mr-1" /> Nova Área</Button> : undefined} />
 
       {areas.length === 0 ? (
         <EmptyState
           icon={<MapPin size={48} />}
           title="Nenhuma área cadastrada"
           description="Crie a primeira área para começar a mapear seus ambientes industriais."
-          action={<Button onClick={openCreate}>Criar Área</Button>}
+          action={canManage ? <Button onClick={openCreate}>Criar Área</Button> : undefined}
         />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -121,8 +125,16 @@ export default function AreaMaps() {
                   <Button variant="primary" size="sm" onClick={() => navigate(`/area-maps/${area.id}`)} className="flex-1">
                     <Eye size={14} className="inline mr-1" /> Abrir Mapa
                   </Button>
-                  <Button variant="ghost" size="sm" onClick={() => openEdit(area)}><Edit2 size={14} /></Button>
-                  <Button variant="ghost" size="sm" onClick={() => setDeleteConfirm(area.id)}><Trash2 size={14} className="text-red-500" /></Button>
+                  {canManage && (
+                    <Button variant="ghost" size="sm" onClick={() => openEdit(area)} title="Editar Configurações">
+                      <Edit2 size={14} />
+                    </Button>
+                  )}
+                  {canDelete && (
+                    <Button variant="ghost" size="sm" onClick={() => setDeleteConfirm(area.id)} title="Excluir">
+                      <Trash2 size={14} className="text-red-500" />
+                    </Button>
+                  )}
                 </div>
               </Card>
             );

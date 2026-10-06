@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { PageHeader, Button, Modal, Input, Select, Textarea, StatusBadge, SearchInput, EmptyState, Card, showToast, ConfirmDialog, Badge } from '../components/ui';
 import { Plus, Wrench, Edit2, Trash2, Eye, Calendar, Clock, AlertTriangle, ShieldAlert } from 'lucide-react';
 import { Equipment, EquipmentStatus, CriticalityLevel } from '../types';
+import { Permissions } from '../lib/permissions';
 
 export default function EquipmentPage() {
   const { user } = useAuth();
@@ -95,9 +96,13 @@ export default function EquipmentPage() {
   const criticalityColors: Record<string, string> = { baixa: 'gray', media: 'blue', alta: 'orange', critica: 'red' };
   const criticalityLabels: Record<string, string> = { baixa: 'Baixa', media: 'Média', alta: 'Alta', critica: 'Crítica' };
 
+  const canCreate = Permissions.canCreateEquipment(user);
+  const canEdit = Permissions.canEditEquipment(user);
+  const canDelete = Permissions.canDeleteEquipment(user);
+
   return (
     <div className="space-y-6">
-      <PageHeader title="Equipamentos" subtitle="Cadastro, criticidade e histórico de manutenção por equipamento" actions={<Button onClick={openCreate}><Plus size={16} className="inline mr-1" /> Novo Equipamento</Button>} />
+      <PageHeader title="Equipamentos" subtitle="Cadastro, criticidade e histórico de manutenção por equipamento" actions={canCreate ? <Button onClick={openCreate}><Plus size={16} className="inline mr-1" /> Novo Equipamento</Button> : undefined} />
 
       <div className="flex flex-col sm:flex-row gap-3">
         <SearchInput value={search} onChange={setSearch} placeholder="Pesquisar por nome ou código..." />
@@ -118,7 +123,7 @@ export default function EquipmentPage() {
       </div>
 
       {filtered.length === 0 ? (
-        <EmptyState icon={<Wrench size={48} />} title="Nenhum equipamento cadastrado" description="Cadastre o primeiro equipamento para gerenciar manutenções." action={<Button onClick={openCreate}>Cadastrar Equipamento</Button>} />
+        <EmptyState icon={<Wrench size={48} />} title="Nenhum equipamento cadastrado" description="Cadastre o primeiro equipamento para gerenciar manutenções." action={canCreate ? <Button onClick={openCreate}>Cadastrar Equipamento</Button> : undefined} />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
           {filtered.map(e => (
@@ -147,12 +152,16 @@ export default function EquipmentPage() {
                 <Button variant="secondary" size="sm" onClick={() => setDetailOpen(e.id)} className="flex-1">
                   <Eye size={14} className="inline mr-1" /> Histórico & Detalhes
                 </Button>
-                <Button variant="ghost" size="sm" onClick={() => openEdit(e)}>
-                  <Edit2 size={14} />
-                </Button>
-                <Button variant="ghost" size="sm" onClick={() => setDeleteConfirm(e.id)}>
-                  <Trash2 size={14} className="text-red-500" />
-                </Button>
+                {canEdit && (
+                  <Button variant="ghost" size="sm" onClick={() => openEdit(e)} title="Editar Equipamento">
+                    <Edit2 size={14} />
+                  </Button>
+                )}
+                {canDelete && (
+                  <Button variant="ghost" size="sm" onClick={() => setDeleteConfirm(e.id)} title="Excluir Equipamento">
+                    <Trash2 size={14} className="text-red-500" />
+                  </Button>
+                )}
               </div>
             </Card>
           ))}

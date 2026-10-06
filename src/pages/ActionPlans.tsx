@@ -35,6 +35,7 @@ import {
 import { useSearchParams } from 'react-router-dom';
 import { ActionPlan, ActionPlanStatus } from '../types';
 import { generate5W2HAiSuggestion, Ai5W2HSuggestion } from '../services/aiService';
+import { Permissions } from '../lib/permissions';
 
 export default function ActionPlans() {
   const { user } = useAuth();
@@ -248,6 +249,10 @@ export default function ActionPlans() {
     { id: 'completed', title: 'Concluído', color: 'border-green-300 bg-green-50/40' },
   ];
 
+  const canCreate = Permissions.canCreate5W2H(user);
+  const canEdit = Permissions.canEdit5W2H(user);
+  const canDelete = Permissions.canDelete5W2H(user);
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -277,12 +282,23 @@ export default function ActionPlans() {
                 <KanbanIcon size={14} /> Kanban
               </button>
             </div>
-            <Button onClick={openCreate}>
-              <Plus size={16} className="inline mr-1" /> Novo Plano
-            </Button>
+            {canCreate && (
+              <Button onClick={openCreate}>
+                <Plus size={16} className="inline mr-1" /> Novo Plano
+              </Button>
+            )}
           </div>
         }
       />
+
+      {!canCreate && (
+        <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center gap-2 text-xs text-blue-800">
+          <Info size={16} className="shrink-0 text-blue-600" />
+          <span>
+            <strong>Modo Consulta Educacional:</strong> Visualização de Planos de Ação 5W2H elaborados pela equipe técnica.
+          </span>
+        </div>
+      )}
 
       <div className="flex flex-col sm:flex-row gap-3">
         <SearchInput value={search} onChange={setSearch} placeholder="Pesquisar planos..." />
@@ -304,8 +320,8 @@ export default function ActionPlans() {
         <EmptyState
           icon={<ClipboardList size={48} />}
           title="Nenhum plano de ação registrado"
-          description="Crie o primeiro plano 5W2H para estruturar a resolução de problemas."
-          action={<Button onClick={openCreate}>Criar Plano 5W2H</Button>}
+          description="Os planos 5W2H detalham a execução técnica das ações de manutenção e projetos."
+          action={canCreate ? <Button onClick={openCreate}>Criar Plano 5W2H</Button> : undefined}
         />
       ) : viewMode === 'list' ? (
         /* LIST VIEW */
@@ -325,17 +341,25 @@ export default function ActionPlans() {
                     {renderPlanStatusBadge(a)}
                     {eq && <Badge color="gray">Equipamento: {eq.name}</Badge>}
                   </div>
-                  <div className="flex gap-1">
-                    <Button variant="ghost" size="sm" onClick={() => openEdit(a)}>
-                      <Edit2 size={14} />
-                    </Button>
-                    <Button variant="ghost" size="sm" onClick={() => handleDuplicate(a)}>
-                      <Copy size={14} />
-                    </Button>
-                    <Button variant="ghost" size="sm" onClick={() => setDeleteConfirm(a.id)}>
-                      <Trash2 size={14} className="text-red-500" />
-                    </Button>
-                  </div>
+                  {(canEdit || canDelete) && (
+                    <div className="flex gap-1">
+                      {canEdit && (
+                        <>
+                          <Button variant="ghost" size="sm" onClick={() => openEdit(a)}>
+                            <Edit2 size={14} />
+                          </Button>
+                          <Button variant="ghost" size="sm" onClick={() => handleDuplicate(a)}>
+                            <Copy size={14} />
+                          </Button>
+                        </>
+                      )}
+                      {canDelete && (
+                        <Button variant="ghost" size="sm" onClick={() => setDeleteConfirm(a.id)}>
+                          <Trash2 size={14} className="text-red-500" />
+                        </Button>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">

@@ -209,7 +209,7 @@ CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id);
 CREATE INDEX IF NOT EXISTS idx_history_created_at ON history(created_at DESC);
 
 -- ====================================================================
--- ROW LEVEL SECURITY (RLS) - SEGURANÇA E ACESSO
+-- ROW LEVEL SECURITY (RLS) - SEGURANÇA E CONTROLE DE ACESSO POR ROLE
 -- ====================================================================
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE people ENABLE ROW LEVEL SECURITY;
@@ -225,21 +225,126 @@ ALTER TABLE layouts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE history ENABLE ROW LEVEL SECURITY;
 
--- Políticas de Acesso para Usuários Autenticados
-DO $$
-DECLARE
-  tbl TEXT;
-BEGIN
-  FOR tbl IN
-    SELECT tablename FROM pg_tables WHERE schemaname = 'public'
-  LOOP
-    EXECUTE format('DROP POLICY IF EXISTS "Acesso Total Autenticado" ON %I;', tbl);
-    EXECUTE format('CREATE POLICY "Acesso Total Autenticado" ON %I FOR ALL USING (auth.role() = ''authenticated'');', tbl);
-  END LOOP;
-END $$;
+-- Helper function to fetch the role of the currently authenticated user
+CREATE OR REPLACE FUNCTION public.get_auth_user_role()
+RETURNS TEXT AS $$
+  SELECT role FROM public.profiles WHERE id = auth.uid();
+$$ LANGUAGE sql STABLE SECURITY DEFINER;
 
--- Permitir leitura pública ou anônima quando necessário para perfis de login
-CREATE POLICY "Leitura de Perfis" ON profiles FOR SELECT USING (true);
+-- 1. PROFILES
+DROP POLICY IF EXISTS "Leitura de Perfis" ON profiles;
+DROP POLICY IF EXISTS "Perfis - Leitura Autenticada" ON profiles;
+DROP POLICY IF EXISTS "Perfis - Atualizacao Admin ou Proprio" ON profiles;
+DROP POLICY IF EXISTS "Perfis - Exclusao Apenas Admin" ON profiles;
+
+CREATE POLICY "Perfis - Leitura Autenticada" ON profiles
+  FOR SELECT USING (auth.role() = 'authenticated');
+
+CREATE POLICY "Perfis - Atualizacao Admin ou Proprio" ON profiles
+  FOR UPDATE USING (
+    auth.uid() = id OR public.get_auth_user_role() = 'admin'
+  );
+
+CREATE POLICY "Perfis - Exclusao Apenas Admin" ON profiles
+  FOR DELETE USING (public.get_auth_user_role() = 'admin');
+
+-- 2. PROBLEMAS & SOLICITAÇÕES
+DROP POLICY IF EXISTS "Problemas - Leitura" ON problems;
+DROP POLICY IF EXISTS "Problemas - Insercao" ON problems;
+DROP POLICY IF EXISTS "Problemas - Atualizacao" ON problems;
+DROP POLICY IF EXISTS "Problemas - Exclusao" ON problems;
+
+CREATE POLICY "Problemas - Leitura" ON problems
+  FOR SELECT USING (auth.role() = 'authenticated');
+
+CREATE POLICY "Problemas - Insercao" ON problems
+  FOR INSERT WITH CHECK (auth.role() = 'authenticated');
+
+CREATE POLICY "Problemas - Atualizacao" ON problems
+  FOR UPDATE USING (
+    public.get_auth_user_role() IN ('admin', 'manager', 'technician')
+    OR (responsible_id = auth.uid()::text AND status = 'identified')
+  );
+
+CREATE POLICY "Problemas - Exclusao" ON problems
+  FOR DELETE USING (public.get_auth_user_role() = 'admin');
+
+-- 3. MATRIZ GUT
+DROP POLICY IF EXISTS "GUT - Leitura" ON gut_analyses;
+DROP POLICY IF EXISTS "GUT - Insercao e Atualizacao" ON gut_analyses;
+DROP POLICY IF EXISTS "GUT - Exclusao" ON gut_analyses;
+
+CREATE POLICY "GUT - Leitura" ON gut_analyses
+  FOR SELECT USING (auth.role() = 'authenticated');
+
+CREATE POLICY "GUT - Insercao e Atualizacao" ON gut_analyses
+  FOR ALL USING (public.get_auth_user_role() IN ('admin', 'manager', 'technician'));
+
+CREATE POLICY "GUT - Exclusao" ON gut_analyses
+  FOR DELETE USING (public.get_auth_user_role() = 'admin');
+
+-- 4. PLANOS DE AÇÃO 5W2H
+DROP POLICY IF EXISTS "5W2H - Leitura" ON action_plans;
+DROP POLICY IF EXISTS "5W2H - Insercao e Atualizacao" ON action_plans;
+DROP POLICY IF EXISTS "5W2H - Exclusao" ON action_plans;
+
+CREATE POLICY "5W2H - Leitura" ON action_plans
+  FOR SELECT USING (auth.role() = 'authenticated');
+
+CREATE POLICY "5W2H - Insercao e Atualizacao" ON action_plans
+  FOR ALL USING (public.get_auth_user_role() IN ('admin', 'manager', 'technician'));
+
+CREATE POLICY "5W2H - Exclusao" ON action_plans
+  FOR DELETE USING (public.get_auth_user_role() = 'admin');
+
+-- 5. ORDENS DE MANUTENÇÃO
+DROP POLICY IF EXISTS "Manutencao - Leitura" ON maintenance_records;
+DROP POLICY IF EXISTS "Manutencao - Insercao e Atualizacao" ON maintenance_records;
+DROP POLICY IF EXISTS "Manutencao - Exclusao" ON maintenance_records;
+
+CREATE POLICY "Manutencao - Leitura" ON maintenance_records
+  FOR SELECT USING (auth.role() = 'authenticated');
+
+CREATE POLICY "Manutencao - Insercao e Atualizacao" ON maintenance_records
+  FOR ALL USING (public.get_auth_user_role() IN ('admin', 'manager', 'technician'));
+
+CREATE POLICY "Manutencao - Exclusao" ON maintenance_records
+  FOR DELETE USING (public.get_auth_user_role() = 'admin');
+
+-- 6. EQUIPAMENTOS, PROJETOS, PESSOAS, PRODUÇÃO, QUALIDADE, LAYOUTS
+DROP POLICY IF EXISTS "Equipamentos - Modificacao" ON equipment;
+CREATE POLICY "Equipamentos - Leitura" ON equipment FOR SELECT USING (auth.role() = 'authenticated');
+CREATE POLICY "Equipamentos - Modificacao" ON equipment FOR ALL USING (public.get_auth_user_role() IN ('admin', 'manager'));
+CREATE POLICY "Equipamentos - Exclusao" ON equipment FOR DELETE USING (public.get_auth_user_role() = 'admin');
+
+CREATE POLICY "Projetos - Leitura" ON projects FOR SELECT USING (auth.role() = 'authenticated');
+CREATE POLICY "Projetos - Modificacao" ON projects FOR ALL USING (public.get_auth_user_role() IN ('admin', 'manager'));
+CREATE POLICY "Projetos - Exclusao" ON projects FOR DELETE USING (public.get_auth_user_role() = 'admin');
+
+CREATE POLICY "Pessoas - Leitura" ON people FOR SELECT USING (auth.role() = 'authenticated');
+CREATE POLICY "Pessoas - Modificacao" ON people FOR ALL USING (public.get_auth_user_role() IN ('admin', 'manager'));
+CREATE POLICY "Pessoas - Exclusao" ON people FOR DELETE USING (public.get_auth_user_role() = 'admin');
+
+CREATE POLICY "Producao - Leitura" ON production_activities FOR SELECT USING (auth.role() = 'authenticated');
+CREATE POLICY "Producao - Modificacao" ON production_activities FOR ALL USING (public.get_auth_user_role() IN ('admin', 'manager'));
+CREATE POLICY "Producao - Exclusao" ON production_activities FOR DELETE USING (public.get_auth_user_role() = 'admin');
+
+CREATE POLICY "Qualidade - Leitura" ON non_conformities FOR SELECT USING (auth.role() = 'authenticated');
+CREATE POLICY "Qualidade - Modificacao" ON non_conformities FOR ALL USING (public.get_auth_user_role() IN ('admin', 'manager', 'technician'));
+CREATE POLICY "Qualidade - Exclusao" ON non_conformities FOR DELETE USING (public.get_auth_user_role() = 'admin');
+
+CREATE POLICY "Layouts - Leitura" ON layouts FOR SELECT USING (auth.role() = 'authenticated');
+CREATE POLICY "Layouts - Modificacao" ON layouts FOR ALL USING (public.get_auth_user_role() IN ('admin', 'manager'));
+CREATE POLICY "Layouts - Exclusao" ON layouts FOR DELETE USING (public.get_auth_user_role() = 'admin');
+
+-- 7. NOTIFICAÇÕES & HISTÓRICO
+CREATE POLICY "Notificacoes - Visualizacao Propria" ON notifications FOR SELECT USING (user_id = auth.uid()::text);
+CREATE POLICY "Notificacoes - Modificacao Propria" ON notifications FOR UPDATE USING (user_id = auth.uid()::text);
+CREATE POLICY "Notificacoes - Insercao" ON notifications FOR INSERT WITH CHECK (auth.role() = 'authenticated');
+
+CREATE POLICY "Historico - Leitura" ON history FOR SELECT USING (auth.role() = 'authenticated');
+CREATE POLICY "Historico - Insercao" ON history FOR INSERT WITH CHECK (auth.role() = 'authenticated');
+CREATE POLICY "Historico - Exclusao Apenas Admin" ON history FOR DELETE USING (public.get_auth_user_role() = 'admin');
 
 -- ====================================================================
 -- TRIGGER: CRIAÇÃO AUTOMÁTICA DE PERFIL NO SIGNUP DO SUPABASE AUTH

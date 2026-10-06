@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { Button, Modal, Input, Select, Textarea, Card, Badge, showToast, ConfirmDialog } from '../components/ui';
 import { ArrowLeft, Save, ZoomIn, ZoomOut, Maximize2, Plus, Trash2, Copy, RotateCw, Upload, Camera, Wrench, AlertTriangle, Eye, X, ChevronDown, Image, FileImage } from 'lucide-react';
 import { AreaMap, MapObject, MapObjectType, MapObjectPhoto } from '../types';
+import { Permissions } from '../lib/permissions';
 
 // Object library definitions
 interface ObjectDef { type: MapObjectType; label: string; icon: string; category: string; defaultW: number; defaultH: number; color: string; }
@@ -66,6 +67,8 @@ export default function AreaMapEditor() {
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  const canManage = Permissions.canManageAreaMaps(user);
+
   if (!area) {
     return (
       <div className="text-center py-12">
@@ -93,6 +96,7 @@ export default function AreaMapEditor() {
 
   // Add object from library
   const addObject = (def: ObjectDef) => {
+    if (!canManage) return;
     const newObj: MapObject = {
       id: generateId(),
       type: def.type,
@@ -112,12 +116,14 @@ export default function AreaMapEditor() {
 
   // Update object
   const updateObject = (objId: string, data: Partial<MapObject>) => {
+    if (!canManage) return;
     const updated = { ...area, objects: area.objects.map(o => o.id === objId ? { ...o, ...data } : o) };
     setArea(updated);
   };
 
   // Delete object
   const deleteObject = (objId: string) => {
+    if (!canManage) return;
     const updated = { ...area, objects: area.objects.filter(o => o.id !== objId) };
     setArea(updated);
     setSelectedId(null);
@@ -125,6 +131,7 @@ export default function AreaMapEditor() {
 
   // Duplicate object
   const duplicateObject = (objId: string) => {
+    if (!canManage) return;
     const obj = area.objects.find(o => o.id === objId);
     if (!obj) return;
     const newObj: MapObject = { ...obj, id: generateId(), x: obj.x + 1, y: obj.y + 1, photos: [...obj.photos] };
@@ -135,6 +142,7 @@ export default function AreaMapEditor() {
 
   // Save
   const handleSave = () => {
+    if (!canManage) return;
     db.updateAreaMap(area.id, { objects: area.objects, generalPhotos: area.generalPhotos });
     db.addHistory({ userId: user!.id, action: 'Mapa salvo', entity: 'areaMap', entityId: area.id, details: area.name });
     showToast('success', 'Mapa salvo com sucesso');
@@ -153,11 +161,13 @@ export default function AreaMapEditor() {
     const obj = area.objects.find(o => o.id === objId);
     if (!obj) return;
     setSelectedId(objId);
+    if (!canManage) return;
     const svgCoords = screenToSvg(e.clientX, e.clientY);
     setDragging({ id: objId, startX: svgCoords.x, startY: svgCoords.y, origX: obj.x, origY: obj.y });
   };
 
   const handleResizeStart = (e: React.MouseEvent, objId: string) => {
+    if (!canManage) return;
     e.stopPropagation();
     const obj = area.objects.find(o => o.id === objId);
     if (!obj) return;
@@ -166,6 +176,7 @@ export default function AreaMapEditor() {
   };
 
   const handleRotateStart = (e: React.MouseEvent, objId: string) => {
+    if (!canManage) return;
     e.stopPropagation();
     const obj = area.objects.find(o => o.id === objId);
     if (!obj) return;
@@ -362,11 +373,14 @@ export default function AreaMapEditor() {
         <div className="flex items-center gap-3">
           <Link to="/area-maps" className="p-2 rounded-lg hover:bg-gray-100"><ArrowLeft size={18} /></Link>
           <div>
-            <h1 className="text-lg font-bold text-gray-800">{area.name}</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-lg font-bold text-gray-800">{area.name}</h1>
+              {!canManage && <Badge color="blue">Visualização</Badge>}
+            </div>
             <p className="text-xs text-gray-500">{area.width}m × {area.length}m</p>
           </div>
         </div>
-          <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2">
           {/* Zoom controls */}
           <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg px-2 py-1">
             <button onClick={() => setZoom(z => Math.max(0.3, z - 0.1))} className="p-1 hover:bg-gray-100 rounded"><ZoomOut size={14} /></button>
@@ -374,54 +388,61 @@ export default function AreaMapEditor() {
             <button onClick={() => setZoom(z => Math.min(5, z + 0.1))} className="p-1 hover:bg-gray-100 rounded"><ZoomIn size={14} /></button>
             <button onClick={fitToScreen} className="p-1 hover:bg-gray-100 rounded ml-1" title="Ajustar à tela"><Maximize2 size={14} /></button>
           </div>
-          <Button variant="secondary" onClick={() => setImportPlantModal(true)} title="Importar planta">
-            <FileImage size={16} className="inline mr-1" /> {area.backgroundImage ? 'Trocar Planta' : 'Importar Planta'}
-          </Button>
-          {area.backgroundImage && (
-            <Button variant="ghost" onClick={removeBackground} title="Remover planta">
-              <Trash2 size={16} className="text-red-500" />
-            </Button>
+          {canManage && (
+            <>
+              <Button variant="secondary" onClick={() => setImportPlantModal(true)} title="Importar planta">
+                <FileImage size={16} className="inline mr-1" /> {area.backgroundImage ? 'Trocar Planta' : 'Importar Planta'}
+              </Button>
+              {area.backgroundImage && (
+                <Button variant="ghost" onClick={removeBackground} title="Remover planta">
+                  <Trash2 size={16} className="text-red-500" />
+                </Button>
+              )}
+              <Button onClick={handleSave}><Save size={16} className="inline mr-1" /> Salvar</Button>
+            </>
           )}
-          <Button onClick={handleSave}><Save size={16} className="inline mr-1" /> Salvar</Button>
-        </div>      </div>
+        </div>
+      </div>
 
       {/* Main editor area */}
       <div className="flex-1 flex gap-3 min-h-0">
         {/* Left sidebar - Object library */}
-        <div className="hidden lg:flex flex-col w-56 bg-white border border-gray-200 rounded-xl overflow-hidden shrink-0">
-          <div className="p-3 border-b border-gray-200">
-            <h3 className="text-xs font-semibold text-gray-500 uppercase">Adicionar</h3>
-          </div>
-          {/* Categories */}
-          <div className="flex border-b border-gray-200 overflow-x-auto">
-            {categories.map(cat => (
-              <button key={cat} onClick={() => setActiveCategory(cat)}
-                className={`px-2 py-1.5 text-[10px] font-medium whitespace-nowrap ${activeCategory === cat ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}>
-                {cat}
-              </button>
-            ))}
-          </div>
-          {/* Objects */}
-          <div className="flex-1 overflow-y-auto p-2">
-            <div className="grid grid-cols-2 gap-1.5">
-              {objectLibrary.filter(o => o.category === activeCategory).map(def => (
-                <button key={def.type} onClick={() => addObject(def)}
-                  className="flex flex-col items-center gap-1 p-2 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-colors text-center">
-                  <span className="text-lg">{def.icon}</span>
-                  <span className="text-[10px] text-gray-600 leading-tight">{def.label}</span>
+        {canManage && (
+          <div className="hidden lg:flex flex-col w-56 bg-white border border-gray-200 rounded-xl overflow-hidden shrink-0">
+            <div className="p-3 border-b border-gray-200">
+              <h3 className="text-xs font-semibold text-gray-500 uppercase">Adicionar</h3>
+            </div>
+            {/* Categories */}
+            <div className="flex border-b border-gray-200 overflow-x-auto">
+              {categories.map(cat => (
+                <button key={cat} onClick={() => setActiveCategory(cat)}
+                  className={`px-2 py-1.5 text-[10px] font-medium whitespace-nowrap ${activeCategory === cat ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}>
+                  {cat}
                 </button>
               ))}
             </div>
-          </div>
-          {/* Link equipment */}
-          {selectedObj && ['machine', 'lathe', 'drill', 'press', 'compressor', 'welder', 'motor', 'custom_equipment'].includes(selectedObj.type) && (
-            <div className="p-3 border-t border-gray-200">
-              <Button size="sm" variant="secondary" className="w-full" onClick={() => setEquipmentModal(true)}>
-                <Wrench size={14} className="inline mr-1" /> Vincular Equipamento
-              </Button>
+            {/* Objects */}
+            <div className="flex-1 overflow-y-auto p-2">
+              <div className="grid grid-cols-2 gap-1.5">
+                {objectLibrary.filter(o => o.category === activeCategory).map(def => (
+                  <button key={def.type} onClick={() => addObject(def)}
+                    className="flex flex-col items-center gap-1 p-2 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-colors text-center">
+                    <span className="text-lg">{def.icon}</span>
+                    <span className="text-[10px] text-gray-600 leading-tight">{def.label}</span>
+                  </button>
+                ))}
+              </div>
             </div>
-          )}
-        </div>
+            {/* Link equipment */}
+            {selectedObj && ['machine', 'lathe', 'drill', 'press', 'compressor', 'welder', 'motor', 'custom_equipment'].includes(selectedObj.type) && (
+              <div className="p-3 border-t border-gray-200">
+                <Button size="sm" variant="secondary" className="w-full" onClick={() => setEquipmentModal(true)}>
+                  <Wrench size={14} className="inline mr-1" /> Vincular Equipamento
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Map canvas */}
         <div className="flex-1 bg-white border border-gray-200 rounded-xl overflow-hidden relative" ref={containerRef}>
@@ -471,16 +492,18 @@ export default function AreaMapEditor() {
           </svg>
 
           {/* Mobile add button */}
-          <div className="lg:hidden absolute bottom-4 left-4">
-            <MobileAddPanel area={area} addObject={addObject} />
-          </div>
+          {canManage && (
+            <div className="lg:hidden absolute bottom-4 left-4">
+              <MobileAddPanel area={area} addObject={addObject} />
+            </div>
+          )}
         </div>
 
         {/* Right sidebar - Properties */}
         {selectedObj && (
           <div className="hidden md:flex flex-col w-64 bg-white border border-gray-200 rounded-xl overflow-hidden shrink-0">
             <div className="p-3 border-b border-gray-200 flex items-center justify-between">
-              <h3 className="text-xs font-semibold text-gray-500 uppercase">Propriedades</h3>
+              <h3 className="text-xs font-semibold text-gray-500 uppercase">{canManage ? 'Propriedades' : 'Detalhes do Objeto'}</h3>
               <button onClick={() => setSelectedId(null)} className="p-1 hover:bg-gray-100 rounded"><X size={14} /></button>
             </div>
             <div className="flex-1 overflow-y-auto p-3 space-y-3">
@@ -491,50 +514,60 @@ export default function AreaMapEditor() {
                 <p className="text-xs text-gray-500">{objectLibrary.find(o => o.type === selectedObj.type)?.label}</p>
               </div>
 
-              {/* Name */}
-              <div>
-                <label className="text-xs font-medium text-gray-600">Nome</label>
-                <input type="text" value={selectedObj.label} onChange={e => updateObject(selectedObj.id, { label: e.target.value })}
-                  className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm mt-1 focus:ring-1 focus:ring-blue-500 outline-none" />
-              </div>
+              {canManage ? (
+                <>
+                  {/* Name */}
+                  <div>
+                    <label className="text-xs font-medium text-gray-600">Nome</label>
+                    <input type="text" value={selectedObj.label} onChange={e => updateObject(selectedObj.id, { label: e.target.value })}
+                      className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm mt-1 focus:ring-1 focus:ring-blue-500 outline-none" />
+                  </div>
 
-              {/* Position */}
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="text-xs text-gray-500">X (m)</label>
-                  <input type="number" step="0.1" value={selectedObj.x.toFixed(1)} onChange={e => updateObject(selectedObj.id, { x: Number(e.target.value) })}
-                    className="w-full px-2 py-1 border border-gray-300 rounded text-xs mt-0.5" />
-                </div>
-                <div>
-                  <label className="text-xs text-gray-500">Y (m)</label>
-                  <input type="number" step="0.1" value={selectedObj.y.toFixed(1)} onChange={e => updateObject(selectedObj.id, { y: Number(e.target.value) })}
-                    className="w-full px-2 py-1 border border-gray-300 rounded text-xs mt-0.5" />
-                </div>
-                <div>
-                  <label className="text-xs text-gray-500">Largura</label>
-                  <input type="number" step="0.1" min="0.3" value={selectedObj.width.toFixed(1)} onChange={e => updateObject(selectedObj.id, { width: Math.max(0.3, Number(e.target.value)) })}
-                    className="w-full px-2 py-1 border border-gray-300 rounded text-xs mt-0.5" />
-                </div>
-                <div>
-                  <label className="text-xs text-gray-500">Altura</label>
-                  <input type="number" step="0.1" min="0.3" value={selectedObj.height.toFixed(1)} onChange={e => updateObject(selectedObj.id, { height: Math.max(0.3, Number(e.target.value)) })}
-                    className="w-full px-2 py-1 border border-gray-300 rounded text-xs mt-0.5" />
-                </div>
-              </div>
+                  {/* Position */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-xs text-gray-500">X (m)</label>
+                      <input type="number" step="0.1" value={selectedObj.x.toFixed(1)} onChange={e => updateObject(selectedObj.id, { x: Number(e.target.value) })}
+                        className="w-full px-2 py-1 border border-gray-300 rounded text-xs mt-0.5" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-500">Y (m)</label>
+                      <input type="number" step="0.1" value={selectedObj.y.toFixed(1)} onChange={e => updateObject(selectedObj.id, { y: Number(e.target.value) })}
+                        className="w-full px-2 py-1 border border-gray-300 rounded text-xs mt-0.5" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-500">Largura</label>
+                      <input type="number" step="0.1" min="0.3" value={selectedObj.width.toFixed(1)} onChange={e => updateObject(selectedObj.id, { width: Math.max(0.3, Number(e.target.value)) })}
+                        className="w-full px-2 py-1 border border-gray-300 rounded text-xs mt-0.5" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-500">Altura</label>
+                      <input type="number" step="0.1" min="0.3" value={selectedObj.height.toFixed(1)} onChange={e => updateObject(selectedObj.id, { height: Math.max(0.3, Number(e.target.value)) })}
+                        className="w-full px-2 py-1 border border-gray-300 rounded text-xs mt-0.5" />
+                    </div>
+                  </div>
 
-              {/* Rotation */}
-              <div>
-                <label className="text-xs text-gray-500">Rotação: {selectedObj.rotation}°</label>
-                <input type="range" min="-180" max="180" value={selectedObj.rotation} onChange={e => updateObject(selectedObj.id, { rotation: Number(e.target.value) })}
-                  className="w-full mt-1" />
-              </div>
+                  {/* Rotation */}
+                  <div>
+                    <label className="text-xs text-gray-500">Rotação: {selectedObj.rotation}°</label>
+                    <input type="range" min="-180" max="180" value={selectedObj.rotation} onChange={e => updateObject(selectedObj.id, { rotation: Number(e.target.value) })}
+                      className="w-full mt-1" />
+                  </div>
 
-              {/* Color */}
-              <div>
-                <label className="text-xs text-gray-500">Cor</label>
-                <input type="color" value={selectedObj.color} onChange={e => updateObject(selectedObj.id, { color: e.target.value })}
-                  className="w-full h-7 mt-1 rounded border border-gray-300" />
-              </div>
+                  {/* Color */}
+                  <div>
+                    <label className="text-xs text-gray-500">Cor</label>
+                    <input type="color" value={selectedObj.color} onChange={e => updateObject(selectedObj.id, { color: e.target.value })}
+                      className="w-full h-7 mt-1 rounded border border-gray-300" />
+                  </div>
+                </>
+              ) : (
+                <div className="bg-slate-50 p-2.5 rounded-lg border border-gray-100 text-xs text-gray-600 space-y-1">
+                  <p><strong>Posição:</strong> X: {selectedObj.x.toFixed(1)}m | Y: {selectedObj.y.toFixed(1)}m</p>
+                  <p><strong>Dimensões:</strong> {selectedObj.width.toFixed(1)}m × {selectedObj.height.toFixed(1)}m</p>
+                  <p><strong>Rotação:</strong> {selectedObj.rotation}°</p>
+                </div>
+              )}
 
               {/* Linked equipment */}
               {linkedEquipment && (
@@ -563,31 +596,41 @@ export default function AreaMapEditor() {
                       <div key={photo.id} className="flex items-center gap-2 p-1 bg-gray-50 rounded">
                         <img src={photo.dataUrl} alt="" className="w-8 h-8 object-cover rounded" />
                         <span className="text-xs text-gray-500 flex-1 truncate">{photo.caption || 'Sem legenda'}</span>
-                        <button onClick={() => updateObject(selectedObj.id, { photos: selectedObj.photos.filter(p => p.id !== photo.id) })} className="text-red-400 hover:text-red-600">
-                          <X size={12} />
-                        </button>
+                        {canManage && (
+                          <button onClick={() => updateObject(selectedObj.id, { photos: selectedObj.photos.filter(p => p.id !== photo.id) })} className="text-red-400 hover:text-red-600">
+                            <X size={12} />
+                          </button>
+                        )}
                       </div>
                     ))}
                   </div>
-                  <label className="mt-2 flex items-center justify-center gap-1 px-2 py-1.5 border border-dashed border-gray-300 rounded-lg text-xs text-gray-500 cursor-pointer hover:bg-gray-50">
-                    <Upload size={12} /> Adicionar foto
-                    <input type="file" accept="image/*" className="hidden" onChange={e => handlePhotoUpload(selectedObj.id, e)} />
-                  </label>
+                  {canManage && (
+                    <label className="mt-2 flex items-center justify-center gap-1 px-2 py-1.5 border border-dashed border-gray-300 rounded-lg text-xs text-gray-500 cursor-pointer hover:bg-gray-50">
+                      <Upload size={12} /> Adicionar foto
+                      <input type="file" accept="image/*" className="hidden" onChange={e => handlePhotoUpload(selectedObj.id, e)} />
+                    </label>
+                  )}
                 </div>
               )}
 
               {/* Description */}
               <div>
                 <label className="text-xs font-medium text-gray-600">Descrição</label>
-                <textarea value={selectedObj.description || ''} onChange={e => updateObject(selectedObj.id, { description: e.target.value })}
-                  className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs mt-1 resize-none h-16" placeholder="Observações..." />
+                {canManage ? (
+                  <textarea value={selectedObj.description || ''} onChange={e => updateObject(selectedObj.id, { description: e.target.value })}
+                    className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs mt-1 resize-none h-16" placeholder="Observações..." />
+                ) : (
+                  <p className="text-xs text-gray-600 bg-gray-50 p-2 rounded mt-1">{selectedObj.description || 'Nenhuma observação.'}</p>
+                )}
               </div>
 
               {/* Actions */}
-              <div className="flex gap-1 pt-2 border-t border-gray-100">
-                <Button size="sm" variant="secondary" onClick={() => duplicateObject(selectedObj.id)} className="flex-1 text-[10px]"><Copy size={10} className="inline mr-0.5" /> Duplicar</Button>
-                <Button size="sm" variant="ghost" onClick={() => setDeleteConfirm(selectedObj.id)}><Trash2 size={12} className="text-red-500" /></Button>
-              </div>
+              {canManage && (
+                <div className="flex gap-1 pt-2 border-t border-gray-100">
+                  <Button size="sm" variant="secondary" onClick={() => duplicateObject(selectedObj.id)} className="flex-1 text-[10px]"><Copy size={10} className="inline mr-0.5" /> Duplicar</Button>
+                  <Button size="sm" variant="ghost" onClick={() => setDeleteConfirm(selectedObj.id)}><Trash2 size={12} className="text-red-500" /></Button>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -597,18 +640,22 @@ export default function AreaMapEditor() {
       <div className="mt-3 bg-white border border-gray-200 rounded-xl p-3">
         <div className="flex items-center justify-between mb-2">
           <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-1"><Image size={14} /> Fotos Gerais da Área</h3>
-          <label className="flex items-center gap-1 px-2 py-1 bg-gray-100 rounded-lg text-xs cursor-pointer hover:bg-gray-200">
-            <Upload size={12} /> Adicionar
-            <input type="file" accept="image/*" className="hidden" onChange={handleGeneralPhotoUpload} />
-          </label>
+          {canManage && (
+            <label className="flex items-center gap-1 px-2 py-1 bg-gray-100 rounded-lg text-xs cursor-pointer hover:bg-gray-200">
+              <Upload size={12} /> Adicionar
+              <input type="file" accept="image/*" className="hidden" onChange={handleGeneralPhotoUpload} />
+            </label>
+          )}
         </div>
         {area.generalPhotos.length > 0 ? (
           <div className="flex gap-2 overflow-x-auto pb-2">
             {area.generalPhotos.map(photo => (
               <div key={photo.id} className="relative shrink-0">
                 <img src={photo.dataUrl} alt="" className="w-20 h-20 object-cover rounded-lg border border-gray-200" />
-                <button onClick={() => setArea({ ...area, generalPhotos: area.generalPhotos.filter(p => p.id !== photo.id) })}
-                  className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full text-[8px] flex items-center justify-center">×</button>
+                {canManage && (
+                  <button onClick={() => setArea({ ...area, generalPhotos: area.generalPhotos.filter(p => p.id !== photo.id) })}
+                    className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full text-[8px] flex items-center justify-center">×</button>
+                )}
               </div>
             ))}
           </div>

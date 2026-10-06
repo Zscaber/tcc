@@ -43,6 +43,7 @@ import {
   Settings,
 } from 'lucide-react';
 import { MaintenanceType, MaintenanceStatus } from '../types';
+import { Permissions } from '../lib/permissions';
 
 // ====================================================================
 // UNIFIED SCHEDULE EVENT MODEL
@@ -198,6 +199,9 @@ export default function Schedule() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<ScheduleEvent | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<ScheduleEvent | null>(null);
+
+  const canManage = Permissions.canManageSchedule(user);
+  const canDelete = Permissions.canDeleteSchedule(user);
 
   // Form state
   const emptyForm = {
@@ -919,9 +923,11 @@ export default function Schedule() {
         title="Cronograma Geral"
         subtitle="Agenda integrada de manutenções, prazos de projetos, planos 5W2H e atividades industriais"
         actions={
-          <Button onClick={() => handleOpenCreate()}>
-            <Plus size={16} className="inline mr-1" /> Novo Agendamento
-          </Button>
+          canManage ? (
+            <Button onClick={() => handleOpenCreate()}>
+              <Plus size={16} className="inline mr-1" /> Novo Agendamento
+            </Button>
+          ) : undefined
         }
       />
 
@@ -1168,16 +1174,18 @@ export default function Schedule() {
                     </span>
 
                     {/* Quick Add Button on Day Cell */}
-                    <button
-                      onClick={e => {
-                        e.stopPropagation();
-                        handleOpenCreate(cell.dateStr);
-                      }}
-                      className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-all"
-                      title={`Agendar para ${formatDateBR(cell.dateStr)}`}
-                    >
-                      <Plus size={13} />
-                    </button>
+                    {canManage && (
+                      <button
+                        onClick={e => {
+                          e.stopPropagation();
+                          handleOpenCreate(cell.dateStr);
+                        }}
+                        className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-all"
+                        title={`Agendar para ${formatDateBR(cell.dateStr)}`}
+                      >
+                        <Plus size={13} />
+                      </button>
+                    )}
                   </div>
 
                   {/* Day Events Stack */}
@@ -1261,13 +1269,15 @@ export default function Schedule() {
                       </p>
                     </div>
 
-                    <button
-                      onClick={() => handleOpenCreate(day.dateStr)}
-                      className="p-1.5 rounded-lg text-gray-500 hover:text-blue-600 hover:bg-blue-50 transition-colors"
-                      title="Novo evento neste dia"
-                    >
-                      <Plus size={15} />
-                    </button>
+                    {canManage && (
+                      <button
+                        onClick={() => handleOpenCreate(day.dateStr)}
+                        className="p-1.5 rounded-lg text-gray-500 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                        title="Novo evento neste dia"
+                      >
+                        <Plus size={15} />
+                      </button>
+                    )}
                   </div>
 
                   {/* Events column list */}
@@ -1341,9 +1351,11 @@ export default function Schedule() {
               title="Nenhum evento encontrado"
               description="Não existem eventos cadastrados para os filtros selecionados."
               action={
-                <Button onClick={() => handleOpenCreate()}>
-                  <Plus size={16} className="inline mr-1" /> Criar Primeiro Agendamento
-                </Button>
+                canManage ? (
+                  <Button onClick={() => handleOpenCreate()}>
+                    <Plus size={16} className="inline mr-1" /> Criar Primeiro Agendamento
+                  </Button>
+                ) : undefined
               }
             />
           ) : (
@@ -1433,26 +1445,30 @@ export default function Schedule() {
                         >
                           <Eye size={16} />
                         </button>
-                        <button
-                          onClick={e => {
-                            e.stopPropagation();
-                            handleOpenEdit(ev);
-                          }}
-                          className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-800"
-                          title="Editar"
-                        >
-                          <Edit2 size={16} />
-                        </button>
-                        <button
-                          onClick={e => {
-                            e.stopPropagation();
-                            setDeleteConfirm(ev);
-                          }}
-                          className="p-2 rounded-lg text-gray-500 hover:bg-red-50 hover:text-red-600"
-                          title="Excluir"
-                        >
-                          <Trash2 size={16} />
-                        </button>
+                        {canManage && (
+                          <button
+                            onClick={e => {
+                              e.stopPropagation();
+                              handleOpenEdit(ev);
+                            }}
+                            className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-800"
+                            title="Editar"
+                          >
+                            <Edit2 size={16} />
+                          </button>
+                        )}
+                        {canDelete && (
+                          <button
+                            onClick={e => {
+                              e.stopPropagation();
+                              setDeleteConfirm(ev);
+                            }}
+                            className="p-2 rounded-lg text-gray-500 hover:bg-red-50 hover:text-red-600"
+                            title="Excluir"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        )}
                       </div>
                     </div>
                   </Card>
@@ -1585,23 +1601,27 @@ export default function Schedule() {
               </div>
 
               <div className="flex items-center gap-2">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => handleOpenEdit(selectedEvent)}
-                >
-                  <Edit2 size={14} className="inline mr-1" /> Editar
-                </Button>
-                <Button
-                  variant="danger"
-                  size="sm"
-                  onClick={() => {
-                    setIsDetailOpen(false);
-                    setDeleteConfirm(selectedEvent);
-                  }}
-                >
-                  <Trash2 size={14} className="inline mr-1" /> Excluir
-                </Button>
+                {canManage && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => handleOpenEdit(selectedEvent)}
+                  >
+                    <Edit2 size={14} className="inline mr-1" /> Editar
+                  </Button>
+                )}
+                {canDelete && (
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    onClick={() => {
+                      setIsDetailOpen(false);
+                      setDeleteConfirm(selectedEvent);
+                    }}
+                  >
+                    <Trash2 size={14} className="inline mr-1" /> Excluir
+                  </Button>
+                )}
                 <Button variant="ghost" size="sm" onClick={() => setIsDetailOpen(false)}>
                   Fechar
                 </Button>

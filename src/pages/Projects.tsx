@@ -2,9 +2,10 @@ import React, { useState } from 'react';
 import { db } from '../store';
 import { useAuth } from '../contexts/AuthContext';
 import { PageHeader, Button, Modal, Input, Select, Textarea, StatusBadge, SearchInput, EmptyState, Card, showToast, ConfirmDialog } from '../components/ui';
-import { Plus, FolderKanban, Edit2, Trash2, Eye } from 'lucide-react';
+import { Plus, FolderKanban, Edit2, Trash2, Eye, Info } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Project, ProjectStatus } from '../types';
+import { Permissions } from '../lib/permissions';
 
 export default function Projects() {
   const { user } = useAuth();
@@ -16,6 +17,10 @@ export default function Projects() {
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const people = db.getPeople();
 
+  const canCreate = Permissions.canCreateProject(user);
+  const canEdit = Permissions.canEditProject(user);
+  const canDelete = Permissions.canDeleteProject(user);
+
   const [form, setForm] = useState({ name: '', code: '', description: '', sector: '', responsibleId: '', teamIds: [] as string[], startDate: '', deadline: '', status: 'planning' as ProjectStatus, notes: '' });
 
   const filtered = projects.filter(p => {
@@ -25,12 +30,14 @@ export default function Projects() {
   });
 
   const openCreate = () => {
+    if (!canCreate) return;
     setEditingProject(null);
     setForm({ name: '', code: '', description: '', sector: '', responsibleId: '', teamIds: [], startDate: '', deadline: '', status: 'planning', notes: '' });
     setModalOpen(true);
   };
 
   const openEdit = (p: Project) => {
+    if (!canEdit) return;
     setEditingProject(p);
     setForm({ name: p.name, code: p.code, description: p.description, sector: p.sector, responsibleId: p.responsibleId, teamIds: p.teamIds, startDate: p.startDate, deadline: p.deadline, status: p.status, notes: p.notes });
     setModalOpen(true);
@@ -39,10 +46,12 @@ export default function Projects() {
   const handleSave = () => {
     if (!form.name) { showToast('error', 'Nome é obrigatório'); return; }
     if (editingProject) {
+      if (!canEdit) { showToast('error', 'Sem permissão'); return; }
       db.updateProject(editingProject.id, form);
       db.addHistory({ userId: user!.id, action: 'Projeto atualizado', entity: 'project', entityId: editingProject.id, details: `${form.name}` });
       showToast('success', 'Projeto atualizado');
     } else {
+      if (!canCreate) { showToast('error', 'Sem permissão'); return; }
       db.createProject(form);
       db.addHistory({ userId: user!.id, action: 'Projeto criado', entity: 'project', entityId: 'new', details: `${form.name}` });
       showToast('success', 'Projeto criado');
@@ -52,6 +61,7 @@ export default function Projects() {
   };
 
   const handleDelete = (id: string) => {
+    if (!canDelete) { showToast('error', 'Apenas administradores podem excluir projetos'); return; }
     const p = db.getProjectById(id);
     db.deleteProject(id);
     db.addHistory({ userId: user!.id, action: 'Projeto excluído', entity: 'project', entityId: id, details: `${p?.name}` });
@@ -61,7 +71,26 @@ export default function Projects() {
 
   return (
     <div>
-      <PageHeader title="Projetos" subtitle="Gerencie seus projetos" actions={<Button onClick={openCreate}><Plus size={16} className="inline mr-1" /> Novo Projeto</Button>} />
+      <PageHeader
+        title="Projetos"
+        subtitle="Acompanhamento e gestão de projetos industriais"
+        actions={
+          canCreate ? (
+            <Button onClick={openCreate}>
+              <Plus size={16} className="inline mr-1" /> Novo Projeto
+            </Button>
+          ) : undefined
+        }
+      />
+
+      {!canCreate && (
+        <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center gap-2 text-xs text-blue-800 mb-4">
+          <Info size={16} className="shrink-0 text-blue-600" />
+          <span>
+            <strong>Modo Consulta:</strong> Visualização de projetos industriais cadastrados pela gestão.
+          </span>
+        </div>
+      )}
 
       <div className="flex flex-col sm:flex-row gap-3 mb-4">
         <SearchInput value={search} onChange={setSearch} placeholder="Pesquisar projetos..." />
@@ -76,7 +105,12 @@ export default function Projects() {
       </div>
 
       {filtered.length === 0 ? (
-        <EmptyState icon={<FolderKanban size={48} />} title="Nenhum projeto encontrado" description="Cadastre o primeiro projeto para começar a gerenciar." action={<Button onClick={openCreate}>Criar Projeto</Button>} />
+        <EmptyState
+          icon={<FolderKanban size={48} />}
+          title="Nenhum projeto encontrado"
+          description="Acompanhamento e controle de iniciativas e projetos da planta."
+          action={canCreate ? <Button onClick={openCreate}>Criar Projeto</Button> : undefined}
+        />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {filtered.map(p => (
@@ -96,8 +130,8 @@ export default function Projects() {
               </div>
               <div className="flex gap-2">
                 <Link to={`/projects/${p.id}`} className="flex-1"><Button variant="secondary" size="sm" className="w-full"><Eye size={14} className="inline mr-1" /> Ver</Button></Link>
-                <Button variant="ghost" size="sm" onClick={() => openEdit(p)}><Edit2 size={14} /></Button>
-                <Button variant="ghost" size="sm" onClick={() => setDeleteConfirm(p.id)}><Trash2 size={14} className="text-red-500" /></Button>
+                {canEdit && <Button variant="ghost" size="sm" onClick={() => openEdit(p)}><Edit2 size={14} /></Button>}
+                {canDelete && <Button variant="ghost" size="sm" onClick={() => setDeleteConfirm(p.id)}><Trash2 size={14} className="text-red-500" /></Button>}
               </div>
             </Card>
           ))}

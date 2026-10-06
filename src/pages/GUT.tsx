@@ -1,10 +1,11 @@
 import React, { useState, useMemo } from 'react';
 import { db } from '../store';
 import { useAuth } from '../contexts/AuthContext';
-import { PageHeader, Button, Modal, Input, Card, EmptyState, showToast, Badge } from '../components/ui';
-import { BarChart3, Plus, Trash2, ArrowUpDown, ClipboardList, Settings, AlertTriangle } from 'lucide-react';
+import { PageHeader, Button, Modal, Card, EmptyState, showToast, Badge } from '../components/ui';
+import { BarChart3, Plus, Trash2, Edit2, Info } from 'lucide-react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import { Permissions } from '../lib/permissions';
 
 export default function GUT() {
   const { user } = useAuth();
@@ -20,6 +21,9 @@ export default function GUT() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState({ problemId: problemFilter, gravity: 3, urgency: 3, tendency: 3 });
   const [sortBy, setSortBy] = useState<'score' | 'gravity' | 'urgency' | 'tendency'>('score');
+
+  const canManage = Permissions.canManageGut(user);
+  const canDelete = Permissions.canDeleteGut(user);
 
   const enriched = useMemo(() => {
     return analyses.map(g => {
@@ -67,9 +71,31 @@ export default function GUT() {
 
   const problemsWithoutGut = problems.filter(p => !analyses.some(a => a.problemId === p.id) && p.status !== 'resolved' && p.status !== 'cancelled');
 
-  const openCreate = () => { setEditingId(null); setForm({ problemId: problemFilter || '', gravity: 3, urgency: 3, tendency: 3 }); setModalOpen(true); };
+  const openCreate = () => {
+    if (!canManage) {
+      showToast('error', 'Apenas Gestores e Técnicos podem cadastrar análises GUT.');
+      return;
+    }
+    setEditingId(null);
+    setForm({ problemId: problemFilter || '', gravity: 3, urgency: 3, tendency: 3 });
+    setModalOpen(true);
+  };
+
+  const openEdit = (g: any) => {
+    if (!canManage) {
+      showToast('error', 'Apenas Gestores e Técnicos podem editar análises GUT.');
+      return;
+    }
+    setEditingId(g.id);
+    setForm({ problemId: g.problemId, gravity: g.gravity, urgency: g.urgency, tendency: g.tendency });
+    setModalOpen(true);
+  };
 
   const handleSave = () => {
+    if (!canManage) {
+      showToast('error', 'Operação não permitida para o seu perfil');
+      return;
+    }
     if (!form.problemId) { showToast('error', 'Selecione um problema'); return; }
     const score = getScore(form.gravity, form.urgency, form.tendency);
     const classification = getClassification(score);
@@ -86,6 +112,10 @@ export default function GUT() {
   };
 
   const handleDelete = (id: string) => {
+    if (!canDelete) {
+      showToast('error', 'Apenas administradores podem excluir análises GUT.');
+      return;
+    }
     db.deleteGutAnalysis(id);
     setAnalyses(db.getGutAnalyses());
     showToast('success', 'Análise removida');
@@ -93,10 +123,34 @@ export default function GUT() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Matriz GUT — Priorização de Problemas" subtitle="Cálculo determinístico: Gravidade × Urgência × Tendência = Pontuação" actions={<Button onClick={openCreate}><Plus size={16} className="inline mr-1" /> Nova Análise</Button>} />
+      <PageHeader
+        title="Matriz GUT — Priorização de Problemas"
+        subtitle="Cálculo determinístico: Gravidade × Urgência × Tendência = Pontuação"
+        actions={
+          canManage ? (
+            <Button onClick={openCreate}>
+              <Plus size={16} className="inline mr-1" /> Nova Análise
+            </Button>
+          ) : undefined
+        }
+      />
+
+      {!canManage && (
+        <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center gap-2 text-xs text-blue-800">
+          <Info size={16} className="shrink-0 text-blue-600" />
+          <span>
+            <strong>Modo Consulta Educacional:</strong> Visualização da Matriz GUT para acompanhamento da priorização técnica.
+          </span>
+        </div>
+      )}
 
       {enriched.length === 0 ? (
-        <EmptyState icon={<BarChart3 size={48} />} title="Nenhuma análise GUT" description="Crie uma análise GUT para priorizar os problemas registrados no sistema." action={<Button onClick={openCreate}>Criar Análise</Button>} />
+        <EmptyState
+          icon={<BarChart3 size={48} />}
+          title="Nenhuma análise GUT"
+          description="A Matriz GUT prioriza os problemas registrados no sistema através de Gravidade, Urgência e Tendência."
+          action={canManage ? <Button onClick={openCreate}>Criar Análise</Button> : undefined}
+        />
       ) : (
         <>
           {/* Chart or Compact Ranking Header */}
@@ -145,7 +199,7 @@ export default function GUT() {
                   <th className="text-center px-3 py-3 font-medium text-gray-600 cursor-pointer hover:text-blue-600" onClick={() => setSortBy('score')}>Fórmula & Pontuação {sortBy === 'score' && '↓'}</th>
                   <th className="text-center px-3 py-3 font-medium text-gray-600">Classificação</th>
                   <th className="text-center px-3 py-3 font-medium text-gray-600">Conexões</th>
-                  <th className="text-center px-3 py-3 font-medium text-gray-600">Ações</th>
+                  {canManage && <th className="text-center px-3 py-3 font-medium text-gray-600">Ações</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -166,11 +220,11 @@ export default function GUT() {
                           <button onClick={() => navigate('/action-plans')} className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded border border-blue-200 hover:bg-blue-100" title="Ver Plano 5W2H">
                             5W2H
                           </button>
-                        ) : (
+                        ) : Permissions.canCreate5W2H(user) ? (
                           <button onClick={() => navigate('/action-plans')} className="text-[11px] text-gray-400 hover:text-blue-600" title="Criar Plano 5W2H">
                             + 5W2H
                           </button>
-                        )}
+                        ) : null}
                         {g.maint ? (
                           <button onClick={() => navigate('/maintenance')} className="text-xs bg-amber-50 text-amber-800 px-2 py-0.5 rounded border border-amber-200 hover:bg-amber-100" title="Ver Manutenção">
                             Manutenção
@@ -178,11 +232,20 @@ export default function GUT() {
                         ) : null}
                       </div>
                     </td>
-                    <td className="text-center px-3 py-3">
-                      <button onClick={() => handleDelete(g.id)} className="p-1.5 rounded hover:bg-red-50 text-red-500" title="Excluir">
-                        <Trash2 size={14} />
-                      </button>
-                    </td>
+                    {canManage && (
+                      <td className="text-center px-3 py-3">
+                        <div className="flex items-center justify-center gap-1">
+                          <button onClick={() => openEdit(g)} className="p-1.5 rounded hover:bg-gray-100 text-gray-500" title="Editar">
+                            <Edit2 size={14} />
+                          </button>
+                          {canDelete && (
+                            <button onClick={() => handleDelete(g.id)} className="p-1.5 rounded hover:bg-red-50 text-red-500" title="Excluir">
+                              <Trash2 size={14} />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -192,7 +255,7 @@ export default function GUT() {
       )}
 
       {/* Modal */}
-      <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)} title="Nova Análise GUT">
+      <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)} title={editingId ? "Editar Análise GUT" : "Nova Análise GUT"}>
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Problema *</label>

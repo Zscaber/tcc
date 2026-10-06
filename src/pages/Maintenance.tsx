@@ -2,8 +2,9 @@ import React, { useState } from 'react';
 import { db, isDateOverdue, getOverdueDaysText } from '../store';
 import { useAuth } from '../contexts/AuthContext';
 import { PageHeader, Button, Modal, Input, Select, Textarea, StatusBadge, SearchInput, EmptyState, Card, showToast, ConfirmDialog, Badge } from '../components/ui';
-import { Plus, Settings, Edit2, Trash2, Eye, Wrench, AlertTriangle, ClipboardList, CheckCircle } from 'lucide-react';
+import { Plus, Settings, Edit2, Trash2, Eye, Wrench, AlertTriangle, ClipboardList, CheckCircle, Info } from 'lucide-react';
 import { MaintenanceRecord, MaintenanceType, MaintenanceStatus } from '../types';
+import { Permissions } from '../lib/permissions';
 
 export default function Maintenance() {
   const { user } = useAuth();
@@ -77,9 +78,32 @@ export default function Maintenance() {
 
   const typeLabels: Record<string, string> = { preventive: 'Preventiva', corrective: 'Corretiva', predictive: 'Preditiva', other: 'Outro' };
 
+  const canCreate = Permissions.canCreateMaintenance(user);
+  const canEdit = Permissions.canEditMaintenance(user);
+  const canDelete = Permissions.canDeleteMaintenance(user);
+
   return (
     <div className="space-y-6">
-      <PageHeader title="Manutenção" subtitle="Registro e controle integrado de manutenções de máquinas e equipamentos" actions={<Button onClick={openCreate}><Plus size={16} className="inline mr-1" /> Nova Manutenção</Button>} />
+      <PageHeader
+        title="Manutenção"
+        subtitle="Registro e controle integrado de manutenções de máquinas e equipamentos"
+        actions={
+          canCreate ? (
+            <Button onClick={openCreate}>
+              <Plus size={16} className="inline mr-1" /> Nova Manutenção
+            </Button>
+          ) : undefined
+        }
+      />
+
+      {!canCreate && (
+        <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center gap-2 text-xs text-blue-800">
+          <Info size={16} className="shrink-0 text-blue-600" />
+          <span>
+            <strong>Modo Consulta Educacional:</strong> Acompanhamento de ordens de serviço e manutenções industriais.
+          </span>
+        </div>
+      )}
 
       <div className="flex flex-col sm:flex-row gap-3">
         <SearchInput value={search} onChange={setSearch} placeholder="Pesquisar por equipamento ou descrição..." />
@@ -101,7 +125,12 @@ export default function Maintenance() {
       </div>
 
       {filtered.length === 0 ? (
-        <EmptyState icon={<Settings size={48} />} title="Nenhum registro de manutenção" description="Registre manutenções preventivas ou corretivas." action={<Button onClick={openCreate}>Registrar Manutenção</Button>} />
+        <EmptyState
+          icon={<Settings size={48} />}
+          title="Nenhum registro de manutenção"
+          description="Controle de intervenções preventivas, corretivas e preditivas dos equipamentos."
+          action={canCreate ? <Button onClick={openCreate}>Registrar Manutenção</Button> : undefined}
+        />
       ) : (
         <div className="space-y-3">
           {filtered.map(m => {
@@ -143,12 +172,16 @@ export default function Maintenance() {
                     <Button variant="secondary" size="sm" onClick={() => setInspectItem(m)}>
                       <Eye size={14} className="inline mr-1" /> Ver Detalhes
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={() => openEdit(m)}>
-                      <Edit2 size={14} />
-                    </Button>
-                    <Button variant="ghost" size="sm" onClick={() => setDeleteConfirm(m.id)}>
-                      <Trash2 size={14} className="text-red-500" />
-                    </Button>
+                    {canEdit && (
+                      <Button variant="ghost" size="sm" onClick={() => openEdit(m)}>
+                        <Edit2 size={14} />
+                      </Button>
+                    )}
+                    {canDelete && (
+                      <Button variant="ghost" size="sm" onClick={() => setDeleteConfirm(m.id)}>
+                        <Trash2 size={14} className="text-red-500" />
+                      </Button>
+                    )}
                   </div>
                 </div>
               </Card>

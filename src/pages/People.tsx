@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { PageHeader, Button, Modal, Input, SearchInput, EmptyState, Card, showToast, ConfirmDialog } from '../components/ui';
 import { Plus, Users, Edit2, Trash2, User } from 'lucide-react';
 import { Person } from '../types';
+import { Permissions } from '../lib/permissions';
 
 export default function People() {
   const { user } = useAuth();
@@ -13,6 +14,9 @@ export default function People() {
   const [editing, setEditing] = useState<Person | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [form, setForm] = useState({ name: '', position: '', email: '' });
+
+  const canManage = Permissions.canManagePeople(user);
+  const canDelete = Permissions.canDeletePeople(user);
 
   const filtered = people.filter(p => !search || p.name.toLowerCase().includes(search.toLowerCase()) || p.email.toLowerCase().includes(search.toLowerCase()) || p.position.toLowerCase().includes(search.toLowerCase()));
 
@@ -44,12 +48,12 @@ export default function People() {
 
   return (
     <div>
-      <PageHeader title="Pessoas" subtitle="Cadastro de pessoas" actions={<Button onClick={openCreate}><Plus size={16} className="inline mr-1" /> Nova Pessoa</Button>} />
+      <PageHeader title="Pessoas" subtitle="Cadastro de pessoas" actions={canManage ? <Button onClick={openCreate}><Plus size={16} className="inline mr-1" /> Nova Pessoa</Button> : undefined} />
 
       <div className="mb-4"><SearchInput value={search} onChange={setSearch} placeholder="Pesquisar pessoas..." /></div>
 
       {filtered.length === 0 ? (
-        <EmptyState icon={<Users size={48} />} title="Nenhuma pessoa cadastrada" description="Cadastre a primeira pessoa para começar." action={<Button onClick={openCreate}>Cadastrar Pessoa</Button>} />
+        <EmptyState icon={<Users size={48} />} title="Nenhuma pessoa cadastrada" description="Cadastre a primeira pessoa para começar." action={canManage ? <Button onClick={openCreate}>Cadastrar Pessoa</Button> : undefined} />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {filtered.map(p => (
@@ -62,8 +66,16 @@ export default function People() {
                   <p className="text-xs text-gray-400 truncate">{p.email}</p>
                 </div>
                 <div className="flex gap-1">
-                  <button onClick={() => openEdit(p)} className="p-1.5 rounded hover:bg-gray-100"><Edit2 size={14} className="text-gray-500" /></button>
-                  <button onClick={() => setDeleteConfirm(p.id)} className="p-1.5 rounded hover:bg-gray-100"><Trash2 size={14} className="text-red-500" /></button>
+                  {canManage && (
+                    <button onClick={() => openEdit(p)} className="p-1.5 rounded hover:bg-gray-100" title="Editar">
+                      <Edit2 size={14} className="text-gray-500" />
+                    </button>
+                  )}
+                  {canDelete && (
+                    <button onClick={() => setDeleteConfirm(p.id)} className="p-1.5 rounded hover:bg-gray-100" title="Excluir">
+                      <Trash2 size={14} className="text-red-500" />
+                    </button>
+                  )}
                 </div>
               </div>
             </Card>

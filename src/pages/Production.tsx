@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { PageHeader, Button, Modal, Input, Select, Textarea, StatusBadge, SearchInput, EmptyState, Card, showToast, ConfirmDialog, Badge } from '../components/ui';
 import { Plus, FileText, Edit2, Trash2, Wrench } from 'lucide-react';
 import { ProductionActivity } from '../types';
+import { Permissions } from '../lib/permissions';
 
 export default function Production() {
   const { user } = useAuth();
@@ -13,6 +14,9 @@ export default function Production() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<ProductionActivity | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+
+  const canManage = Permissions.canManageProduction(user);
+  const canDelete = Permissions.canDeleteProduction(user);
 
   const people = db.getPeople();
   const projects = db.getProjects();
@@ -68,7 +72,7 @@ export default function Production() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Produção" subtitle="Atividades de produção com vinculação a equipamentos e setores" actions={<Button onClick={openCreate}><Plus size={16} className="inline mr-1" /> Nova Atividade</Button>} />
+      <PageHeader title="Produção" subtitle="Atividades de produção com vinculação a equipamentos e setores" actions={canManage ? <Button onClick={openCreate}><Plus size={16} className="inline mr-1" /> Nova Atividade</Button> : undefined} />
 
       <div className="flex flex-col sm:flex-row gap-3">
         <SearchInput value={search} onChange={setSearch} placeholder="Pesquisar atividades..." />
@@ -82,7 +86,7 @@ export default function Production() {
       </div>
 
       {filtered.length === 0 ? (
-        <EmptyState icon={<FileText size={48} />} title="Nenhuma atividade" description="Cadastre a primeira atividade de produção." action={<Button onClick={openCreate}>Cadastrar Atividade</Button>} />
+        <EmptyState icon={<FileText size={48} />} title="Nenhuma atividade" description="Cadastre a primeira atividade de produção." action={canManage ? <Button onClick={openCreate}>Cadastrar Atividade</Button> : undefined} />
       ) : (
         <div className="space-y-3">
           {filtered.map(a => {
@@ -107,8 +111,16 @@ export default function Production() {
                     </div>
                   </div>
                   <div className="flex gap-1 shrink-0">
-                    <Button variant="ghost" size="sm" onClick={() => openEdit(a)}><Edit2 size={14} /></Button>
-                    <Button variant="ghost" size="sm" onClick={() => setDeleteConfirm(a.id)}><Trash2 size={14} className="text-red-500" /></Button>
+                    {canManage && (
+                      <Button variant="ghost" size="sm" onClick={() => openEdit(a)} title="Editar">
+                        <Edit2 size={14} />
+                      </Button>
+                    )}
+                    {canDelete && (
+                      <Button variant="ghost" size="sm" onClick={() => setDeleteConfirm(a.id)} title="Excluir">
+                        <Trash2 size={14} className="text-red-500" />
+                      </Button>
+                    )}
                   </div>
                 </div>
               </Card>
