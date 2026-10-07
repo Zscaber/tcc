@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { db } from '../store';
 import { useAuth } from '../contexts/AuthContext';
 import { PageHeader, Button, Modal, Card, EmptyState, showToast, Badge } from '../components/ui';
-import { BarChart3, Plus, Trash2, Edit2, Info } from 'lucide-react';
+import { BarChart3, Plus, Trash2, Edit2, Info, HelpCircle } from 'lucide-react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { Permissions } from '../lib/permissions';
@@ -18,6 +18,7 @@ export default function GUT() {
   const maintenanceRecords = db.getMaintenanceRecords();
 
   const [modalOpen, setModalOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState({ problemId: problemFilter, gravity: 3, urgency: 3, tendency: 3 });
   const [sortBy, setSortBy] = useState<'score' | 'gravity' | 'urgency' | 'tendency'>('score');
@@ -264,18 +265,30 @@ export default function GUT() {
               {(editingId ? problems : problemsWithoutGut).map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
             </select>
           </div>
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1">Gravidade (1-5)</label>
-              <input type="number" min={1} max={5} value={form.gravity} onChange={e => setForm({ ...form, gravity: Math.min(5, Math.max(1, Number(e.target.value))) })} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-center focus:ring-2 focus:ring-blue-500 outline-none" />
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Critérios de Avaliação</span>
+              <button
+                type="button"
+                onClick={() => setHelpOpen(true)}
+                className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 hover:underline font-medium"
+              >
+                <HelpCircle size={14} /> Como avaliar? ❔
+              </button>
             </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1">Urgência (1-5)</label>
-              <input type="number" min={1} max={5} value={form.urgency} onChange={e => setForm({ ...form, urgency: Math.min(5, Math.max(1, Number(e.target.value))) })} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-center focus:ring-2 focus:ring-blue-500 outline-none" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1">Tendência (1-5)</label>
-              <input type="number" min={1} max={5} value={form.tendency} onChange={e => setForm({ ...form, tendency: Math.min(5, Math.max(1, Number(e.target.value))) })} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-center focus:ring-2 focus:ring-blue-500 outline-none" />
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">Gravidade (1-5)</label>
+                <input type="number" min={1} max={5} value={form.gravity} onChange={e => setForm({ ...form, gravity: Math.min(5, Math.max(1, Number(e.target.value))) })} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-center focus:ring-2 focus:ring-blue-500 outline-none" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">Urgência (1-5)</label>
+                <input type="number" min={1} max={5} value={form.urgency} onChange={e => setForm({ ...form, urgency: Math.min(5, Math.max(1, Number(e.target.value))) })} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-center focus:ring-2 focus:ring-blue-500 outline-none" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">Tendência (1-5)</label>
+                <input type="number" min={1} max={5} value={form.tendency} onChange={e => setForm({ ...form, tendency: Math.min(5, Math.max(1, Number(e.target.value))) })} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-center focus:ring-2 focus:ring-blue-500 outline-none" />
+              </div>
             </div>
           </div>
 
@@ -293,6 +306,61 @@ export default function GUT() {
         <div className="flex justify-end gap-3 mt-6">
           <Button variant="secondary" onClick={() => setModalOpen(false)}>Cancelar</Button>
           <Button onClick={handleSave}>Salvar Análise</Button>
+        </div>
+      </Modal>
+
+      {/* Modal de Ajuda: Como avaliar a Matriz GUT */}
+      <Modal isOpen={helpOpen} onClose={() => setHelpOpen(false)} title="Como avaliar a Matriz GUT?" size="md">
+        <div className="space-y-4 text-xs text-gray-700">
+          <p className="text-gray-600">
+            Está com dúvidas sobre como definir os valores? Consulte abaixo uma orientação para cada critério.
+          </p>
+
+          <div className="space-y-3">
+            <div className="p-3 bg-red-50/60 border border-red-200 rounded-lg">
+              <h4 className="font-bold text-red-900 mb-1">GRAVIDADE</h4>
+              <p className="text-gray-600 mb-2">Mede o impacto que o problema causa.</p>
+              <ul className="space-y-0.5 text-gray-800">
+                <li><strong>1</strong> — impacto mínimo</li>
+                <li><strong>2</strong> — impacto baixo</li>
+                <li><strong>3</strong> — impacto moderado</li>
+                <li><strong>4</strong> — impacto alto</li>
+                <li><strong>5</strong> — impacto crítico</li>
+              </ul>
+            </div>
+
+            <div className="p-3 bg-amber-50/60 border border-amber-200 rounded-lg">
+              <h4 className="font-bold text-amber-900 mb-1">URGÊNCIA</h4>
+              <p className="text-gray-600 mb-2">Mede o quanto é necessário agir rapidamente.</p>
+              <ul className="space-y-0.5 text-gray-800">
+                <li><strong>1</strong> — pode aguardar</li>
+                <li><strong>2</strong> — pouco urgente</li>
+                <li><strong>3</strong> — requer atenção em breve</li>
+                <li><strong>4</strong> — requer ação rápida</li>
+                <li><strong>5</strong> — ação imediata</li>
+              </ul>
+            </div>
+
+            <div className="p-3 bg-blue-50/60 border border-blue-200 rounded-lg">
+              <h4 className="font-bold text-blue-900 mb-1">TENDÊNCIA</h4>
+              <p className="text-gray-600 mb-2">Mede a velocidade com que o problema tende a piorar.</p>
+              <ul className="space-y-0.5 text-gray-800">
+                <li><strong>1</strong> — não tende a piorar</li>
+                <li><strong>2</strong> — piora lentamente</li>
+                <li><strong>3</strong> — pode piorar gradualmente</li>
+                <li><strong>4</strong> — piora rapidamente</li>
+                <li><strong>5</strong> — piora muito rapidamente</li>
+              </ul>
+            </div>
+          </div>
+
+          <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg text-purple-900">
+            <p className="font-semibold">Pontuação GUT = Gravidade × Urgência × Tendência.</p>
+            <p className="text-purple-700 mt-0.5">Quanto maior a pontuação, maior a prioridade de tratamento.</p>
+          </div>
+        </div>
+        <div className="flex justify-end mt-4">
+          <Button variant="secondary" onClick={() => setHelpOpen(false)}>Fechar</Button>
         </div>
       </Modal>
     </div>
