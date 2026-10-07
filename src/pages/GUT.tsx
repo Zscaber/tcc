@@ -273,7 +273,7 @@ export default function GUT() {
                 onClick={() => setHelpOpen(true)}
                 className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 hover:underline font-medium"
               >
-                <HelpCircle size={14} /> Como avaliar? ❔
+                <HelpCircle size={14} /> Como avaliar? 
               </button>
             </div>
             <div className="grid grid-cols-3 gap-4">
