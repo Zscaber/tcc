@@ -1,7 +1,7 @@
 import {
   AppState, User, Person, Project, Equipment, Problem,
   GutAnalysis, ActionPlan, MaintenanceRecord, ProductionActivity,
-  NonConformity, Notification, HistoryEntry, Layout
+  NonConformity, Notification, HistoryEntry, Layout, MaintenanceRequest
 } from '../types';
 import { supabaseService, mappers } from '../services/supabaseService';
 import { isSupabaseConfigured } from '../lib/supabase';
@@ -22,6 +22,8 @@ const defaultState: AppState = {
   notifications: [],
   history: [],
   layouts: [],
+  areaMaps: [],
+  maintenanceRequests: [],
   demoDataLoaded: false,
 };
 
@@ -84,6 +86,7 @@ export const db = {
           layouts: remoteData.layouts && remoteData.layouts.length > 0 ? remoteData.layouts : state.layouts,
           notifications: remoteData.notifications && remoteData.notifications.length > 0 ? remoteData.notifications : state.notifications,
           history: remoteData.history && remoteData.history.length > 0 ? remoteData.history : state.history,
+          maintenanceRequests: remoteData.maintenanceRequests && remoteData.maintenanceRequests.length > 0 ? remoteData.maintenanceRequests : state.maintenanceRequests,
         };
         saveState(mergedState);
       }
@@ -444,6 +447,38 @@ export const db = {
     state.layouts = state.layouts.filter(l => l.id !== id);
     saveState(state);
     supabaseService.deleteRecord('layouts', id);
+  },
+
+  // Maintenance Requests
+  getMaintenanceRequests: () => loadState().maintenanceRequests || [],
+  getMaintenanceRequestById: (id: string) => (loadState().maintenanceRequests || []).find(r => r.id === id),
+  getMaintenanceRequestsByUser: (userId: string) => (loadState().maintenanceRequests || []).filter(r => r.requesterId === userId),
+  createMaintenanceRequest: (req: Omit<MaintenanceRequest, 'id' | 'createdAt' | 'updatedAt'>): MaintenanceRequest => {
+    const state = loadState();
+    const now = new Date().toISOString();
+    const newReq: MaintenanceRequest = { ...req, id: generateId(), createdAt: now, updatedAt: now };
+    if (!state.maintenanceRequests) state.maintenanceRequests = [];
+    state.maintenanceRequests.unshift(newReq);
+    saveState(state);
+    supabaseService.saveRecord('maintenance_requests', mappers.requestToDB(newReq));
+    return newReq;
+  },
+  updateMaintenanceRequest: (id: string, data: Partial<MaintenanceRequest>) => {
+    const state = loadState();
+    if (!state.maintenanceRequests) state.maintenanceRequests = [];
+    const idx = state.maintenanceRequests.findIndex(r => r.id === id);
+    if (idx >= 0) {
+      state.maintenanceRequests[idx] = { ...state.maintenanceRequests[idx], ...data, updatedAt: new Date().toISOString() };
+      saveState(state);
+      supabaseService.saveRecord('maintenance_requests', mappers.requestToDB(state.maintenanceRequests[idx]));
+    }
+  },
+  deleteMaintenanceRequest: (id: string) => {
+    const state = loadState();
+    if (!state.maintenanceRequests) return;
+    state.maintenanceRequests = state.maintenanceRequests.filter(r => r.id !== id);
+    saveState(state);
+    supabaseService.deleteRecord('maintenance_requests', id);
   },
 
   // Demo data loader

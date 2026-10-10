@@ -2,8 +2,9 @@ import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import {
   AppState, User, Person, Project, Equipment, Problem,
   GutAnalysis, ActionPlan, MaintenanceRecord, ProductionActivity,
-  NonConformity, Notification, HistoryEntry, Layout
+  NonConformity, Notification, HistoryEntry, Layout, MaintenanceRequest
 } from '../types';
+
 
 // ====================================================================
 // MAPPERS: CONVERSÃO DE DADOS (CamelCase <-> Snake_Case)
@@ -361,6 +362,42 @@ export const mappers = {
     details: h.details,
     created_at: h.createdAt,
   }),
+
+  // Maintenance Requests
+  requestFromDB: (r: any): MaintenanceRequest => ({
+    id: r.id,
+    title: r.title,
+    description: r.description || '',
+    sector: r.sector || '',
+    location: r.location || '',
+    equipmentId: r.equipment_id || '',
+    requesterId: r.requester_id || '',
+    priority: r.priority || 'medium',
+    status: r.status || 'pending',
+    notes: r.notes || '',
+    rejectionReason: r.rejection_reason || '',
+    linkedProblemId: r.linked_problem_id || '',
+    photoUrl: r.photo_url || '',
+    createdAt: r.created_at || new Date().toISOString(),
+    updatedAt: r.updated_at || new Date().toISOString(),
+  }),
+  requestToDB: (r: MaintenanceRequest) => ({
+    id: r.id,
+    title: r.title,
+    description: r.description,
+    sector: r.sector,
+    location: r.location,
+    equipment_id: r.equipmentId || null,
+    requester_id: r.requesterId,
+    priority: r.priority,
+    status: r.status,
+    notes: r.notes,
+    rejection_reason: r.rejectionReason || null,
+    linked_problem_id: r.linkedProblemId || null,
+    photo_url: r.photoUrl || null,
+    created_at: r.createdAt,
+    updated_at: r.updatedAt,
+  }),
 };
 
 // ====================================================================
@@ -387,6 +424,7 @@ export const supabaseService = {
         { data: layouts },
         { data: notifications },
         { data: history },
+        { data: requests },
       ] = await Promise.all([
         supabase.from('profiles').select('*'),
         supabase.from('people').select('*'),
@@ -401,6 +439,7 @@ export const supabaseService = {
         supabase.from('layouts').select('*'),
         supabase.from('notifications').select('*'),
         supabase.from('history').select('*').order('created_at', { ascending: false }).limit(200),
+        supabase.from('maintenance_requests').select('*').order('created_at', { ascending: false }),
       ]);
 
       return {
@@ -417,6 +456,7 @@ export const supabaseService = {
         layouts: (layouts || []).map(mappers.layoutFromDB),
         notifications: (notifications || []).map(mappers.notificationFromDB),
         history: (history || []).map(mappers.historyFromDB),
+        maintenanceRequests: (requests || []).map(mappers.requestFromDB),
       };
     } catch (err) {
       console.warn('[SupabaseService] Erro ao carregar dados do Supabase:', err);

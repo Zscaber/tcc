@@ -277,6 +277,27 @@ export interface AreaMap {
   updatedAt: string;
 }
 
+export type RequestStatus = 'pending' | 'analyzing' | 'approved' | 'rejected' | 'completed';
+export type RequestPriority = 'low' | 'medium' | 'high' | 'critical';
+
+export interface MaintenanceRequest {
+  id: string;
+  title: string;
+  description: string;
+  sector: string;
+  location: string;
+  equipmentId: string;
+  requesterId: string;  // user id (profiles.id)
+  priority: RequestPriority;
+  status: RequestStatus;
+  notes: string;         // observações do responsável
+  rejectionReason: string; // motivo de rejeição
+  linkedProblemId: string; // problema gerado ao aprovar
+  photoUrl: string;       // URL de foto (opcional, extensível)
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface AppState {
   users: User[];
   people: Person[];
@@ -292,5 +313,6 @@ export interface AppState {
   history: HistoryEntry[];
   layouts: Layout[];
   areaMaps: AreaMap[];
+  maintenanceRequests: MaintenanceRequest[];
   demoDataLoaded: boolean;
 }

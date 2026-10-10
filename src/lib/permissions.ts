@@ -138,4 +138,28 @@ export const Permissions = {
   canDeleteAny: (user: User | null): boolean => {
     return user?.role === 'admin';
   },
+
+  // 13. SOLICITAÇÕES DE MANUTENÇÃO
+  /** Todos os perfis autenticados podem abrir solicitações */
+  canCreateRequest: (user: User | null): boolean => !!user,
+
+  /** Solicitante pode ver apenas as próprias; técnico/gestor/admin veem todas */
+  canViewAllRequests: (user: User | null): boolean => {
+    return user?.role === 'admin' || user?.role === 'manager' || user?.role === 'technician';
+  },
+
+  /** Apenas técnico, gestor e admin podem alterar status */
+  canManageRequest: (user: User | null): boolean => {
+    return user?.role === 'admin' || user?.role === 'manager' || user?.role === 'technician';
+  },
+
+  /** Solicitante pode cancelar a própria enquanto ainda pendente */
+  canCancelOwnRequest: (user: User | null, requesterId: string, status: string): boolean => {
+    if (!user) return false;
+    if (user.role === 'admin' || user.role === 'manager' || user.role === 'technician') return true;
+    return user.id === requesterId && status === 'pending';
+  },
+
+  /** Admin pode excluir */
+  canDeleteRequest: (user: User | null): boolean => user?.role === 'admin',
 };

@@ -109,6 +109,9 @@ export function StatusBadge({ status }: { status: string }) {
     preventive: { label: 'Preventiva', color: 'blue' },
     corrective: { label: 'Corretiva', color: 'orange' },
     predictive: { label: 'Preditiva', color: 'purple' },
+    // Solicitações de manutenção
+    approved: { label: 'Aprovada', color: 'green' },
+    rejected: { label: 'Rejeitada', color: 'red' },
   };
   const config = map[status] || { label: status, color: 'gray' };
   return <Badge color={config.color}>{config.label}</Badge>;
