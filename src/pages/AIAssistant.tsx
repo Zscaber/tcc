@@ -31,6 +31,8 @@ export default function AIAssistant() {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const isSubmittingRef = useRef(false);
+  const activeRequestIdRef = useRef(0);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -42,17 +44,23 @@ export default function AIAssistant() {
 
   const handleSendQuery = async (queryText: string) => {
     const text = queryText.trim();
-    if (!text || isLoading) return;
+    if (!text || isSubmittingRef.current || isLoading) return;
 
-    const userMsg: Message = { role: 'user', content: text };
-    const updatedHistory = [...messages, userMsg];
-    setMessages(updatedHistory);
-    setInput('');
+    // Bloqueio síncrono imediato para evitar submissões concorrentes / duplo clique
+    isSubmittingRef.current = true;
     setIsLoading(true);
+    setInput('');
+
+    const currentRequestId = ++activeRequestIdRef.current;
+    const userMsg: Message = { role: 'user', content: text };
+
+    // Captura histórico anterior antes de adicionar a nova mensagem
+    const previousMessages = messages;
+    setMessages(prev => [...prev, userMsg]);
 
     try {
-      // Envia histórico recente para contexto de follow-up questions
-      const historyPayload = messages.slice(-6).map(m => ({
+      // Envia histórico recente sanitizado para contexto de follow-up questions
+      const historyPayload = previousMessages.slice(-6).map(m => ({
         role: m.role,
         content: m.content,
       }));
@@ -64,6 +72,9 @@ export default function AIAssistant() {
         currentUserRole: user?.role,
       });
 
+      // Se a conversa foi reiniciada durante a requisição, descarta a resposta órfã
+      if (activeRequestIdRef.current !== currentRequestId) return;
+
       const assistantMsg: Message = {
         role: 'assistant',
         content: response.content,
@@ -72,22 +83,30 @@ export default function AIAssistant() {
         source: response.source,
       };
 
-      setMessages([...updatedHistory, assistantMsg]);
+      setMessages(prev => [...prev, assistantMsg]);
     } catch (err: any) {
+      if (activeRequestIdRef.current !== currentRequestId) return;
+
       const errorMsg: Message = {
         role: 'assistant',
         content: 'Ocorreu uma falha inesperada ao consultar o assistente. Por favor, tente novamente.',
         isAiGenerated: false,
         source: 'local_database',
       };
-      setMessages([...updatedHistory, errorMsg]);
+      setMessages(prev => [...prev, errorMsg]);
     } finally {
-      setIsLoading(false);
+      if (activeRequestIdRef.current === currentRequestId) {
+        setIsLoading(false);
+        isSubmittingRef.current = false;
+      }
     }
   };
 
   const handleClearChat = () => {
+    activeRequestIdRef.current++;
     setMessages([]);
+    setIsLoading(false);
+    isSubmittingRef.current = false;
   };
 
   const suggestions = [

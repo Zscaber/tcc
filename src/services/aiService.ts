@@ -273,11 +273,17 @@ export interface AssistantChatParams {
   currentUserRole?: string;
 }
 
+export interface FallbackDiagnostic {
+  reason: string;
+  errorType: 'MODEL_OVERLOADED' | 'AUTH_ERROR' | 'NETWORK_ERROR' | 'GEMINI_ERROR' | 'CONFIG_ERROR' | 'TIMEOUT_ERROR' | 'UNKNOWN';
+  isTemporary?: boolean;
+}
+
 /**
  * Consulta o Assistente IA conectado aos dados reais do sistema.
  * 1. Tenta a Supabase Edge Function 'assistant-chat' (segura, autenticada com RLS e Gemini).
- * 2. Em caso de indisponibilidade ou ausência de chave, utiliza o fallback transparente
- *    de consulta direta e segura aos dados locais reais, informando a fonte com transparência.
+ * 2. Em caso de indisponibilidade, timeout ou erro de modelo, utiliza o fallback transparente
+ *    de consulta direta e segura aos dados locais reais, informando a fonte e motivo com clareza.
  */
 export async function askAssistantAi(params: AssistantChatParams): Promise<AssistantResponse> {
   const { message, history = [], currentUserId, currentUserRole } = params;
@@ -295,12 +301,24 @@ export async function askAssistantAi(params: AssistantChatParams): Promise<Assis
   // 1. Tenta invocar a Supabase Edge Function se configurado
   if (isSupabaseConfigured()) {
     try {
-      const { data, error } = await supabase.functions.invoke('assistant-chat', {
+      // Obter sessão atual para garantir envio de token atualizado
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData?.session?.access_token;
+
+      const invokeOptions: any = {
         body: {
           message: message.trim(),
           history: history.slice(-6).map(h => ({ role: h.role, content: h.content })),
         },
-      });
+      };
+
+      if (accessToken) {
+        invokeOptions.headers = {
+          Authorization: `Bearer ${accessToken}`,
+        };
+      }
+
+      const { data, error } = await supabase.functions.invoke('assistant-chat', invokeOptions);
 
       if (!error && data && data.content) {
         return {
@@ -312,26 +330,115 @@ export async function askAssistantAi(params: AssistantChatParams): Promise<Assis
         };
       }
 
+      // Diagnóstico detalhado do erro sem vazar credenciais
+      let errorType: FallbackDiagnostic['errorType'] = 'UNKNOWN';
+      let isTemporary = false;
+      let rawError = '';
+
       if (error) {
-        console.warn('[AiService] assistant-chat Edge Function retornou erro ou não está implantada:', error);
+        if (error.context && typeof error.context.json === 'function') {
+          try {
+            const errJson = await error.context.json();
+            rawError = errJson?.error || errJson?.details || JSON.stringify(errJson);
+            if (errJson?.code === 'MODEL_OVERLOADED' || errJson?.isTemporary || errJson?.status === 'UNAVAILABLE') {
+              errorType = 'MODEL_OVERLOADED';
+              isTemporary = true;
+            }
+          } catch {
+            rawError = error.message || 'Falha na resposta da Edge Function';
+          }
+        } else {
+          rawError = error.message || 'Falha de comunicação com a Edge Function';
+        }
+
+        if (errorType === 'UNKNOWN') {
+          const upper = rawError.toUpperCase();
+          if (
+            upper.includes('UNAVAILABLE') ||
+            upper.includes('OVERLOADED') ||
+            upper.includes('ALTA DEMANDA') ||
+            upper.includes('HIGH DEMAND') ||
+            upper.includes('503') ||
+            upper.includes('MODEL_OVERLOADED')
+          ) {
+            errorType = 'MODEL_OVERLOADED';
+            isTemporary = true;
+          } else if (rawError.includes('autenticação') || rawError.includes('401') || rawError.includes('Unauthorized')) {
+            errorType = 'AUTH_ERROR';
+          } else if (rawError.includes('GEMINI_API_KEY')) {
+            errorType = 'CONFIG_ERROR';
+          } else if (rawError.includes('Gemini') || rawError.includes('502') || rawError.includes('quota') || rawError.includes('RESOURCE_EXHAUSTED')) {
+            errorType = 'GEMINI_ERROR';
+          } else if (rawError.includes('Failed to fetch') || rawError.includes('NetworkError') || rawError.includes('timeout')) {
+            errorType = 'NETWORK_ERROR';
+          }
+        }
+
+        const sanitizedReason = rawError
+          .replace(/Bearer\s+[A-Za-z0-9\-_\.]+/gi, 'Bearer [REDACTED]')
+          .replace(/key=[A-Za-z0-9\-_\.]+/gi, 'key=[REDACTED]');
+
+        console.warn(`[AiService] assistant-chat falhou (${errorType}):`, sanitizedReason);
+
+        return localDataQueryFallback(message.trim(), currentUserId, currentUserRole, {
+          reason: sanitizedReason,
+          errorType,
+          isTemporary,
+        });
       }
-    } catch (edgeErr) {
-      console.warn('[AiService] Erro de rede ou comunicação com Edge Function:', edgeErr);
+    } catch (edgeErr: any) {
+      const errMsg = edgeErr?.message || String(edgeErr);
+      const sanitized = errMsg.replace(/Bearer\s+[A-Za-z0-9\-_\.]+/gi, 'Bearer [REDACTED]');
+      console.warn('[AiService] Exceção ao chamar assistant-chat:', sanitized);
+
+      return localDataQueryFallback(message.trim(), currentUserId, currentUserRole, {
+        reason: sanitized,
+        errorType: 'NETWORK_ERROR',
+      });
     }
   }
 
   // 2. Fallback Seguro: Consulta direta aos dados locais reais
-  // Conforme requisito: fundamenta apenas em dados reais e reconhece quando não consegue interpretar.
-  return localDataQueryFallback(message.trim(), currentUserId, currentUserRole);
+  return localDataQueryFallback(message.trim(), currentUserId, currentUserRole, {
+    reason: 'Supabase não conectado no ambiente',
+    errorType: 'CONFIG_ERROR',
+  });
+}
+
+function getFriendlyErrorReason(type?: FallbackDiagnostic['errorType']): string {
+  switch (type) {
+    case 'MODEL_OVERLOADED':
+      return 'modelo de IA temporariamente indisponível (alta demanda no Gemini)';
+    case 'AUTH_ERROR':
+      return 'validação de sessão em andamento';
+    case 'GEMINI_ERROR':
+      return 'limite ou erro na API Gemini';
+    case 'NETWORK_ERROR':
+      return 'instabilidade temporária de rede';
+    case 'CONFIG_ERROR':
+      return 'serviço em configuração';
+    default:
+      return 'Edge Function indisponível';
+  }
 }
 
 /**
  * Motor de consulta direta aos dados locais reais (fallback seguro).
- * Trata as consultas mais comuns de gestão da manutenção sem inventar informações.
- * Se não for possível interpretar a intenção da pergunta localmente, informa com honestidade.
+ * Trata as consultas de dados do sistema e sinaliza com transparência a contingência.
  */
-function localDataQueryFallback(query: string, userId?: string, userRole?: string): AssistantResponse {
+function localDataQueryFallback(
+  query: string,
+  userId?: string,
+  userRole?: string,
+  diagnostic?: FallbackDiagnostic
+): AssistantResponse {
   const q = query.toLowerCase().trim();
+  const noticePrefix = diagnostic
+    ? diagnostic.errorType === 'MODEL_OVERLOADED'
+      ? `> ℹ️ *Aviso: O modelo Gemini está com alta demanda momentânea. Como sua pergunta é uma consulta direta ao sistema, os dados abaixo foram extraídos com precisão da base local.*\n\n`
+      : `> ℹ️ *Modo de Consulta Direta: A Edge Function não respondeu (${getFriendlyErrorReason(diagnostic.errorType)}). Exibindo dados reais do sistema local.*\n\n`
+    : '';
+
   const equipment = db.getEquipment();
   const problems = db.getProblems();
   const gutAnalyses = db.getGutAnalyses();
@@ -341,6 +448,7 @@ function localDataQueryFallback(query: string, userId?: string, userRole?: strin
   const people = db.getPeople();
   const projects = db.getProjects();
   const nonConformities = db.getNonConformities();
+  const layouts = db.getLayouts();
 
   const isRestrictedRequester = userRole === 'student' || userRole === 'employee';
   const visibleRequests = isRestrictedRequester && userId
@@ -367,7 +475,7 @@ function localDataQueryFallback(query: string, userId?: string, userRole?: strin
 
     return {
       success: true,
-      content: `📋 **Solicitações de Manutenção Abertas (${pendingRequests.length} encontrada(s)):**\n\n${listStr}\n\n*(Dados obtidos diretamente do banco local)*`,
+      content: `${noticePrefix}📋 **Solicitações de Manutenção Abertas (${pendingRequests.length} encontrada(s)):**\n\n${listStr}\n\n*(Dados obtidos diretamente do banco local)*`,
       actionLinks: [{ label: 'Gerenciar Solicitações', path: '/requests' }],
       isAiGenerated: false,
       source: 'local_database',
@@ -380,7 +488,7 @@ function localDataQueryFallback(query: string, userId?: string, userRole?: strin
     if (abnormalEq.length === 0) {
       return {
         success: true,
-        content: '✅ **Consulta Direta aos Dados:** Todos os equipamentos cadastrados estão atualmente em operação normal.',
+        content: `${noticePrefix}✅ **Consulta Direta aos Dados:** Todos os equipamentos cadastrados estão atualmente em operação normal.`,
         actionLinks: [{ label: 'Ver Equipamentos', path: '/equipment' }],
         isAiGenerated: false,
         source: 'local_database',
@@ -394,7 +502,7 @@ function localDataQueryFallback(query: string, userId?: string, userRole?: strin
 
     return {
       success: true,
-      content: `⚠️ **Equipamentos com Anormalidade ou em Manutenção (${abnormalEq.length}):**\n\n${listStr}\n\n*(Dados obtidos diretamente do banco local)*`,
+      content: `${noticePrefix}⚠️ **Equipamentos com Anormalidade ou em Manutenção (${abnormalEq.length}):**\n\n${listStr}\n\n*(Dados obtidos diretamente do banco local)*`,
       actionLinks: [{ label: 'Ver Módulo de Equipamentos', path: '/equipment' }],
       isAiGenerated: false,
       source: 'local_database',
@@ -407,7 +515,7 @@ function localDataQueryFallback(query: string, userId?: string, userRole?: strin
     if (overdueMaint.length === 0) {
       return {
         success: true,
-        content: '✅ **Consulta Direta aos Dados:** Nenhuma ordem de manutenção está com prazo vencido no momento.',
+        content: `${noticePrefix}✅ **Consulta Direta aos Dados:** Nenhuma ordem de manutenção está com prazo vencido no momento.`,
         actionLinks: [{ label: 'Ver Manutenções', path: '/maintenance' }],
         isAiGenerated: false,
         source: 'local_database',
@@ -423,7 +531,7 @@ function localDataQueryFallback(query: string, userId?: string, userRole?: strin
 
     return {
       success: true,
-      content: `🚨 **Manutenções com Prazo Vencido (${overdueMaint.length} registro(s)):**\n\n${listStr}\n\n*(Dados obtidos diretamente do banco local)*`,
+      content: `${noticePrefix}🚨 **Manutenções com Prazo Vencido (${overdueMaint.length} registro(s)):**\n\n${listStr}\n\n*(Dados obtidos diretamente do banco local)*`,
       actionLinks: [{ label: 'Abrir Módulo de Manutenção', path: '/maintenance' }],
       isAiGenerated: false,
       source: 'local_database',
@@ -438,7 +546,7 @@ function localDataQueryFallback(query: string, userId?: string, userRole?: strin
       if (openProbs.length === 0) {
         return {
           success: true,
-          content: '✅ **Consulta Direta aos Dados:** Não há problemas em aberto cadastrados no momento.',
+          content: `${noticePrefix}✅ **Consulta Direta aos Dados:** Não há problemas em aberto cadastrados no momento.`,
           actionLinks: [{ label: 'Ver Problemas', path: '/problems' }],
           isAiGenerated: false,
           source: 'local_database',
@@ -446,7 +554,7 @@ function localDataQueryFallback(query: string, userId?: string, userRole?: strin
       }
       return {
         success: true,
-        content: `ℹ️ Existem **${openProbs.length}** problemas em aberto, porém nenhuma análise de prioridade na Matriz GUT foi registrada ainda.`,
+        content: `${noticePrefix}ℹ️ Existem **${openProbs.length}** problemas em aberto, porém nenhuma análise de prioridade na Matriz GUT foi registrada ainda.`,
         actionLinks: [{ label: 'Ir para Matriz GUT', path: '/gut' }, { label: 'Ver Problemas', path: '/problems' }],
         isAiGenerated: false,
         source: 'local_database',
@@ -461,7 +569,7 @@ function localDataQueryFallback(query: string, userId?: string, userRole?: strin
 
     return {
       success: true,
-      content: `🎯 **Problemas com Maior Prioridade na Matriz GUT:**\n\n${listStr}\n\n*(Dados obtidos diretamente do banco local)*`,
+      content: `${noticePrefix}🎯 **Problemas com Maior Prioridade na Matriz GUT:**\n\n${listStr}\n\n*(Dados obtidos diretamente do banco local)*`,
       actionLinks: [{ label: 'Abrir Matriz GUT', path: '/gut' }, { label: 'Ver Problemas', path: '/problems' }],
       isAiGenerated: false,
       source: 'local_database',
@@ -474,7 +582,7 @@ function localDataQueryFallback(query: string, userId?: string, userRole?: strin
     if (upcoming.length === 0) {
       return {
         success: true,
-        content: 'ℹ️ **Consulta Direta aos Dados:** Nenhuma manutenção agendada para os próximos 15 dias.',
+        content: `${noticePrefix}ℹ️ **Consulta Direta aos Dados:** Nenhuma manutenção agendada para os próximos 15 dias.`,
         actionLinks: [{ label: 'Ver Cronograma', path: '/schedule' }],
         isAiGenerated: false,
         source: 'local_database',
@@ -488,7 +596,7 @@ function localDataQueryFallback(query: string, userId?: string, userRole?: strin
 
     return {
       success: true,
-      content: `📅 **Manutenções Programadas para os Próximos Dias (${upcoming.length}):**\n\n${listStr}\n\n*(Dados obtidos diretamente do banco local)*`,
+      content: `${noticePrefix}📅 **Manutenções Programadas para os Próximos Dias (${upcoming.length}):**\n\n${listStr}\n\n*(Dados obtidos diretamente do banco local)*`,
       actionLinks: [{ label: 'Abrir Cronograma', path: '/schedule' }, { label: 'Ver Manutenções', path: '/maintenance' }],
       isAiGenerated: false,
       source: 'local_database',
@@ -501,7 +609,7 @@ function localDataQueryFallback(query: string, userId?: string, userRole?: strin
     if (activePlans.length === 0) {
       return {
         success: true,
-        content: '✅ **Consulta Direta aos Dados:** Não há planos de ação 5W2H pendentes no momento.',
+        content: `${noticePrefix}✅ **Consulta Direta aos Dados:** Não há planos de ação 5W2H pendentes no momento.`,
         actionLinks: [{ label: 'Ver Planos 5W2H', path: '/action-plans' }],
         isAiGenerated: false,
         source: 'local_database',
@@ -515,7 +623,7 @@ function localDataQueryFallback(query: string, userId?: string, userRole?: strin
 
     return {
       success: true,
-      content: `📝 **Planos de Ação 5W2H Ativos (${activePlans.length}):**\n\n${listStr}\n\n*(Dados obtidos diretamente do banco local)*`,
+      content: `${noticePrefix}📝 **Planos de Ação 5W2H Ativos (${activePlans.length}):**\n\n${listStr}\n\n*(Dados obtidos diretamente do banco local)*`,
       actionLinks: [{ label: 'Abrir Planos 5W2H', path: '/action-plans' }],
       isAiGenerated: false,
       source: 'local_database',
@@ -532,8 +640,9 @@ function localDataQueryFallback(query: string, userId?: string, userRole?: strin
 
     return {
       success: true,
-      content: `📊 **Resumo dos Dados Reais da Manutenção:**\n\n` +
+      content: `${noticePrefix}📊 **Resumo dos Dados Reais da Manutenção:**\n\n` +
         `• **Equipamentos Cadastrados:** ${equipment.length} (${inMaintEq} fora de operação normal)\n` +
+        `• **Áreas Mapeadas (Layout):** ${Array.isArray(layouts) ? layouts.length : 'indisponível'}\n` +
         `• **Problemas em Aberto:** ${openProbs}\n` +
         `• **Solicitações Pendentes:** ${openReqs}\n` +
         `• **Manutenções com Prazo Vencido:** ${overdueMaint}\n` +
@@ -559,7 +668,7 @@ function localDataQueryFallback(query: string, userId?: string, userRole?: strin
     const eqMaint = maintenance.filter(m => m.equipmentId === exactEq.id);
     return {
       success: true,
-      content: `🔎 **Ficha do Equipamento: ${exactEq.name} (${exactEq.code})**\n\n` +
+      content: `${noticePrefix}🔎 **Ficha do Equipamento: ${exactEq.name} (${exactEq.code})**\n\n` +
         `• Status: **${exactEq.status}** | Criticidade: **${exactEq.criticality || 'Média'}**\n` +
         `• Setor: ${exactEq.sector || 'Geral'} | Local: ${exactEq.location || 'N/A'}\n` +
         `• Próxima Manutenção: ${exactEq.nextMaintenance || 'N/A'}\n` +
@@ -572,25 +681,103 @@ function localDataQueryFallback(query: string, userId?: string, userRole?: strin
     };
   }
 
+  // H2. "Quantas áreas foram criadas na seção Mapa de Áreas? / Layouts"
+  if (
+    q.includes('mapa de área') ||
+    q.includes('mapa de area') ||
+    q.includes('mapa de áreas') ||
+    q.includes('mapa de areas') ||
+    q.includes('layout') ||
+    ((q.includes('área') || q.includes('area')) && (q.includes('quant') || q.includes('criada') || q.includes('cadastrad') || q.includes('sistema') || q.includes('seção') || q.includes('secao') || q.includes('lista') || q.includes('qual') || q.includes('quais') || q.includes('tem') || q.includes('possu')))
+  ) {
+    if (!Array.isArray(layouts)) {
+      return {
+        success: false,
+        content: `${noticePrefix}⚠️ **Falha na consulta do Mapa de Áreas:**\n\nNão foi possível carregar os registros de áreas do banco de dados local.`,
+        actionLinks: [{ label: 'Abrir Mapa de Áreas', path: '/layout' }],
+        isAiGenerated: false,
+        source: 'local_database',
+      };
+    }
+
+    if (layouts.length === 0) {
+      return {
+        success: true,
+        content: `${noticePrefix}🗺️ **Mapa de Áreas:**\n\nO sistema atualmente possui **0 áreas criadas** (nenhuma área física cadastrada na seção Mapa de Áreas).\n\nVocê pode cadastrar e desenhar as áreas físicas da planta diretamente no módulo de layout industrial.`,
+        actionLinks: [{ label: 'Abrir Mapa de Áreas', path: '/layout' }],
+        isAiGenerated: false,
+        source: 'local_database',
+      };
+    }
+
+    const listStr = layouts.map(l => {
+      const dim = (l.widthMeters && l.lengthMeters) ? ` (${l.widthMeters}m × ${l.lengthMeters}m)` : '';
+      const desc = l.description ? ` — ${l.description}` : '';
+      return `• **${l.name}**${dim}${desc}`;
+    }).join('\n');
+
+    return {
+      success: true,
+      content: `${noticePrefix}🗺️ **Mapa de Áreas:**\n\nO sistema possui **${layouts.length} área(s) criada(s)** na seção Mapa de Áreas:\n\n${listStr}\n\n*(Dados obtidos diretamente do banco local)*`,
+      actionLinks: [{ label: 'Abrir Mapa de Áreas', path: '/layout' }],
+      isAiGenerated: false,
+      source: 'local_database',
+    };
+  }
+
   // I. Reconhece com transparência que não foi possível interpretar sem a IA generativa
+  if (diagnostic?.errorType === 'MODEL_OVERLOADED') {
+    return {
+      success: false,
+      content: `⏳ **O modelo de IA está temporariamente indisponível devido à alta demanda.**\n\n` +
+        `A API do Gemini retornou uma sobrecarga momentânea nos servidores (\`503 UNAVAILABLE\`).\n\n` +
+        `Como a sua pergunta requer interpretação avançada em linguagem natural, ela **não foi resolvida pela consulta direta aos dados locais** para evitar respostas imprecisas ou desconexas.\n\n` +
+        `🔄 **Como proceder:**\n` +
+        `• Aguarde alguns segundos e **tente enviar sua pergunta novamente**.\n` +
+        `• Ou, se desejar consultar dados operacionais imediatos do sistema, utilize uma das opções rápidas abaixo:\n` +
+        `  - *“Quais equipamentos estão em manutenção?”*\n` +
+        `  - *“Quais manutenções estão atrasadas?”*\n` +
+        `  - *“Quantas áreas estão criadas no Mapa de Áreas?”*\n` +
+        `  - *“Existem solicitações de manutenção pendentes?”*\n` +
+        `  - *“Quais são os problemas mais urgentes segundo a matriz GUT?”*\n` +
+        `  - *“Resumo da situação da manutenção”*`,
+      actionLinks: [
+        { label: 'Ver Equipamentos', path: '/equipment' },
+        { label: 'Abrir Mapa de Áreas', path: '/layout' },
+        { label: 'Ver Manutenções', path: '/maintenance' },
+        { label: 'Ver Solicitações', path: '/requests' },
+      ],
+      isAiGenerated: false,
+      source: 'local_database',
+      error: diagnostic.reason || 'MODEL_OVERLOADED',
+    };
+  }
+
+  const diagnosticMsg = diagnostic
+    ? `Não foi possível conectar ao modelo generativo Gemini (${getFriendlyErrorReason(diagnostic.errorType)}).`
+    : `Não foi possível conectar ao modelo generativo Gemini (Edge Function 'assistant-chat').`;
+
   return {
     success: false,
-    content: `Não foi possível conectar ao modelo generativo Gemini (Edge Function 'assistant-chat') para interpretar esta pergunta em linguagem natural.\n\n` +
-      `Como estou operando no modo de **consulta direta ao banco local**, consigo responder com precisão sobre:\n` +
+    content: `⚠️ **${diagnosticMsg}**\n\n` +
+      `Esta pergunta requer interpretação avançada em linguagem natural e não pode ser resolvida apenas com o motor de consulta direta local.\n\n` +
+      `**Consultas diretas que consigo responder com os dados reais locais:**\n` +
       `• *“Quais equipamentos estão em manutenção?”*\n` +
       `• *“Quais manutenções estão atrasadas?”*\n` +
+      `• *“Quantas áreas estão criadas no Mapa de Áreas?”*\n` +
       `• *“Existem solicitações de manutenção pendentes?”*\n` +
-      `• *“Quais são os problemas mais urgentes no GUT?”*\n` +
+      `• *“Quais são os problemas mais urgentes segundo a matriz GUT?”*\n` +
       `• *“Quais planos 5W2H estão pendentes?”*\n` +
       `• *“Resumo da situação da manutenção”*\n\n` +
-      `Ou selecione uma das opções rápidas disponíveis.`,
+      `Ou selecione uma das opções rápidas disponíveis abaixo.`,
     actionLinks: [
       { label: 'Ver Equipamentos', path: '/equipment' },
+      { label: 'Abrir Mapa de Áreas', path: '/layout' },
       { label: 'Ver Manutenções', path: '/maintenance' },
       { label: 'Ver Solicitações', path: '/requests' },
     ],
     isAiGenerated: false,
     source: 'local_database',
-    error: 'fallback_uninterpreted',
+    error: diagnostic?.reason || 'fallback_uninterpreted',
   };
 }
