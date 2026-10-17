@@ -326,9 +326,13 @@ export default function Requests() {
         subtitle={isManager ? 'Gerencie e acompanhe todas as solicitações recebidas' : 'Abra e acompanhe suas solicitações de manutenção'}
         actions={
           Permissions.canCreateRequest(user) ? (
-            <Button onClick={() => { setForm(emptyForm); setCreateOpen(true); }}>
-              <Plus size={16} className="mr-1" /> Nova Solicitação
-            </Button>
+            <Button
+  onClick={() => { setForm(emptyForm); setCreateOpen(true); }}
+  className="inline-flex flex-row items-center justify-center gap-2 whitespace-nowrap"
+>
+  <Plus size={16} className="shrink-0" />
+  <span>Nova Solicitação</span>
+</Button>
           ) : null
         }
       />
@@ -401,9 +405,13 @@ export default function Requests() {
           description={isManager ? 'Ainda não há solicitações registradas ou os filtros estão muito restritivos.' : 'Você ainda não abriu nenhuma solicitação. Clique em "Nova Solicitação" para começar.'}
           action={
             Permissions.canCreateRequest(user) ? (
-              <Button onClick={() => { setForm(emptyForm); setCreateOpen(true); }}>
-                <Plus size={16} className="mr-1" /> Nova Solicitação
-              </Button>
+             <Button
+  onClick={() => { setForm(emptyForm); setCreateOpen(true); }}
+  className="inline-flex flex-row items-center justify-center gap-2 whitespace-nowrap"
+>
+  <Plus size={16} className="shrink-0" />
+  <span>Nova Solicitação</span>
+</Button>
             ) : undefined
           }
         />
