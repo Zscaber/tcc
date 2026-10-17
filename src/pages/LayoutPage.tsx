@@ -128,7 +128,7 @@ export default function LayoutPage() {
             setForm({ name: '', widthMeters: 20, lengthMeters: 15, description: '', projectId: '' });
             setModalCreateOpen(true);
           }}>
-            <Plus size={16} className="inline mr-1" /> + Nova Área
+            <Plus size={16} className="inline mr-1" /> Nova Área
           </Button>
         }
       />
