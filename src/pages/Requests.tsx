@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { db } from '../store';
+import { supabaseService } from '../services/supabaseService';
 import { useAuth } from '../contexts/AuthContext';
 import {
   PageHeader,
@@ -27,6 +28,9 @@ import {
   Trash2,
   Filter,
   Clock,
+  Camera,
+  Upload,
+  ExternalLink,
 } from 'lucide-react';
 import { MaintenanceRequest, RequestPriority, RequestStatus } from '../types';
 import { Permissions } from '../lib/permissions';
@@ -87,6 +91,57 @@ export default function Requests() {
   };
   const [form, setForm] = useState(emptyForm);
 
+  // ── Upload de imagem (JPG, PNG, WEBP até 5 MB) ────────────────────────────
+  const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+  const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
+
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const clearSelectedImage = () => {
+    setSelectedFile(null);
+    setPreviewUrl(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
+      showToast('error', 'Formato inválido! Selecione uma imagem JPG, PNG ou WEBP.');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
+    if (file.size > MAX_IMAGE_SIZE_BYTES) {
+      showToast('error', 'A imagem selecionada excede o limite máximo de 5 MB.');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
+    setSelectedFile(file);
+    const reader = new FileReader();
+    reader.onload = () => {
+      setPreviewUrl(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const openCreateModal = () => {
+    setForm(emptyForm);
+    clearSelectedImage();
+    setCreateOpen(true);
+  };
+
+  const closeCreateModal = () => {
+    setCreateOpen(false);
+    setForm(emptyForm);
+    clearSelectedImage();
+  };
+
   // ── Formulário de gestão (técnico/gestor) ─────────────────────────────────
   const [manageForm, setManageForm] = useState({
     status: 'analyzing' as RequestStatus,
@@ -120,13 +175,33 @@ export default function Requests() {
 
   // ── Ações ──────────────────────────────────────────────────────────────────
 
-  const handleCreate = (e: React.FormEvent) => {
+  const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.title.trim() || !form.description.trim() || !form.sector.trim()) {
       showToast('error', 'Preencha título, descrição e setor/local.');
       return;
     }
     if (!user) return;
+
+    let finalPhotoUrl = '';
+
+    if (selectedFile) {
+      setIsUploading(true);
+      try {
+        const storageUrl = await supabaseService.uploadRequestPhoto(selectedFile, user.id);
+        if (storageUrl) {
+          finalPhotoUrl = storageUrl;
+        } else if (previewUrl) {
+          // Fallback para DataURL (base64) caso o bucket ainda não tenha sido configurado no Supabase
+          finalPhotoUrl = previewUrl;
+        }
+      } catch (uploadErr) {
+        console.warn('[Requests] Falha no upload para o Supabase Storage, utilizando armazenamento local:', uploadErr);
+        finalPhotoUrl = previewUrl || '';
+      } finally {
+        setIsUploading(false);
+      }
+    }
 
     const newReq = db.createMaintenanceRequest({
       title: form.title.trim(),
@@ -140,7 +215,7 @@ export default function Requests() {
       notes: '',
       rejectionReason: '',
       linkedProblemId: '',
-      photoUrl: form.photoUrl.trim(),
+      photoUrl: finalPhotoUrl,
     });
 
     db.addHistory({
@@ -170,6 +245,7 @@ export default function Requests() {
     setItems(reload());
     setCreateOpen(false);
     setForm(emptyForm);
+    clearSelectedImage();
     showToast('success', 'Solicitação enviada com sucesso!');
   };
 
@@ -327,12 +403,12 @@ export default function Requests() {
         actions={
           Permissions.canCreateRequest(user) ? (
             <Button
-  onClick={() => { setForm(emptyForm); setCreateOpen(true); }}
-  className="inline-flex flex-row items-center justify-center gap-2 whitespace-nowrap"
->
-  <Plus size={16} className="shrink-0" />
-  <span>Nova Solicitação</span>
-</Button>
+              onClick={openCreateModal}
+              className="inline-flex flex-row items-center justify-center gap-2 whitespace-nowrap"
+            >
+              <Plus size={16} className="shrink-0" />
+              <span>Nova Solicitação</span>
+            </Button>
           ) : null
         }
       />
@@ -405,13 +481,13 @@ export default function Requests() {
           description={isManager ? 'Ainda não há solicitações registradas ou os filtros estão muito restritivos.' : 'Você ainda não abriu nenhuma solicitação. Clique em "Nova Solicitação" para começar.'}
           action={
             Permissions.canCreateRequest(user) ? (
-             <Button
-  onClick={() => { setForm(emptyForm); setCreateOpen(true); }}
-  className="inline-flex flex-row items-center justify-center gap-2 whitespace-nowrap"
->
-  <Plus size={16} className="shrink-0" />
-  <span>Nova Solicitação</span>
-</Button>
+              <Button
+                onClick={openCreateModal}
+                className="inline-flex flex-row items-center justify-center gap-2 whitespace-nowrap"
+              >
+                <Plus size={16} className="shrink-0" />
+                <span>Nova Solicitação</span>
+              </Button>
             ) : undefined
           }
         />
@@ -516,7 +592,7 @@ export default function Requests() {
       )}
 
       {/* ── Modal: Nova Solicitação ─────────────────────────────────────────── */}
-      <Modal isOpen={createOpen} onClose={() => setCreateOpen(false)} title="Nova Solicitação de Manutenção" size="md">
+      <Modal isOpen={createOpen} onClose={closeCreateModal} title="Nova Solicitação de Manutenção" size="md">
         <form onSubmit={handleCreate} className="space-y-4">
           <Input
             label="Título *"
@@ -570,16 +646,68 @@ export default function Requests() {
               <option value="critical">Crítica</option>
             </Select>
           </div>
-          <Input
-            label="URL da foto (opcional)"
-            value={form.photoUrl}
-            onChange={e => setForm({ ...form, photoUrl: e.target.value })}
-            placeholder="https://..."
-            type="url"
-          />
+
+          {/* Upload de Imagem */}
+          <div className="space-y-1.5">
+            <label className="block text-sm font-medium text-gray-700">
+              Foto do problema <span className="text-gray-400 font-normal">(opcional)</span>
+            </label>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              onChange={handleFileSelect}
+              className="hidden"
+            />
+
+            {!previewUrl ? (
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                className="w-full border-2 border-dashed border-gray-300 rounded-lg p-5 flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-blue-500 hover:bg-blue-50/40 transition-all group"
+              >
+                <div className="p-2.5 rounded-full bg-gray-100 group-hover:bg-blue-100 text-gray-500 group-hover:text-blue-600 transition-colors">
+                  <Camera size={22} />
+                </div>
+                <div className="text-center">
+                  <span className="text-sm font-medium text-gray-700 group-hover:text-blue-600">
+                    Clique para selecionar uma foto
+                  </span>
+                  <p className="text-xs text-gray-400 mt-0.5">Formatos: JPG, PNG ou WEBP (máximo 5 MB)</p>
+                </div>
+              </div>
+            ) : (
+              <div className="border border-gray-200 rounded-lg p-3 bg-gray-50/60 space-y-2">
+                <div className="relative rounded-lg overflow-hidden border border-gray-200 bg-white max-h-56 flex items-center justify-center">
+                  <img
+                    src={previewUrl}
+                    alt="Prévia da imagem selecionada"
+                    className="max-h-56 w-full object-contain rounded-lg"
+                  />
+                </div>
+                <div className="flex items-center justify-between text-xs text-gray-600 pt-1">
+                  <span className="truncate max-w-[260px] font-medium" title={selectedFile?.name}>
+                    {selectedFile?.name || 'Imagem selecionada'} {selectedFile ? `(${(selectedFile.size / (1024 * 1024)).toFixed(2)} MB)` : ''}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={clearSelectedImage}
+                    disabled={isUploading}
+                    className="text-red-600 hover:text-red-800 font-medium inline-flex items-center gap-1 hover:underline p-1 disabled:opacity-50"
+                  >
+                    <Trash2 size={13} /> Remover foto
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
           <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="secondary" onClick={() => setCreateOpen(false)}>Cancelar</Button>
-            <Button type="submit">Enviar Solicitação</Button>
+            <Button type="button" variant="secondary" onClick={closeCreateModal} disabled={isUploading}>
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={isUploading}>
+              {isUploading ? 'Enviando foto...' : 'Enviar Solicitação'}
+            </Button>
           </div>
         </form>
       </Modal>
@@ -646,11 +774,28 @@ export default function Requests() {
             )}
 
             {viewItem.photoUrl && (
-              <div>
-                <span className="text-xs font-semibold text-gray-400 uppercase block mb-1">Foto</span>
-                <a href={viewItem.photoUrl} target="_blank" rel="noreferrer" className="text-blue-600 text-sm underline">
-                  Ver foto anexada
-                </a>
+              <div className="border border-gray-200 rounded-lg p-3 bg-gray-50/50">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
+                    <Camera size={14} className="text-gray-400" /> Foto Anexada
+                  </span>
+                  <a
+                    href={viewItem.photoUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-xs text-blue-600 hover:text-blue-800 font-medium inline-flex items-center gap-1 hover:underline"
+                  >
+                    <ExternalLink size={12} /> Abrir em tamanho original
+                  </a>
+                </div>
+                <div className="relative rounded-lg overflow-hidden border border-gray-200 bg-white">
+                  <img
+                    src={viewItem.photoUrl}
+                    alt={`Foto da solicitação ${viewItem.title}`}
+                    className="w-full max-h-64 object-contain rounded-lg"
+                    loading="lazy"
+                  />
+                </div>
               </div>
             )}
 

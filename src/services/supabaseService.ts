@@ -485,4 +485,36 @@ export const supabaseService = {
       console.warn(`[SupabaseService] Falha ao excluir de ${tableName}:`, err);
     }
   },
+
+  // Upload Photo to Supabase Storage (bucket 'maintenance-requests')
+  async uploadRequestPhoto(file: File, userId: string): Promise<string | null> {
+    if (!isSupabaseConfigured()) return null;
+    try {
+      const bucket = 'maintenance-requests';
+      const fileExt = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+      const timestamp = Date.now();
+      const randomStr = Math.random().toString(36).substring(2, 8);
+      const fileName = `${timestamp}_${randomStr}.${fileExt}`;
+      const filePath = `${userId}/${fileName}`;
+
+      const { data, error } = await supabase.storage
+        .from(bucket)
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: false,
+          contentType: file.type,
+        });
+
+      if (error) {
+        console.warn(`[SupabaseService] Falha ao enviar foto para o bucket '${bucket}':`, error.message);
+        return null;
+      }
+
+      const { data: publicData } = supabase.storage.from(bucket).getPublicUrl(data.path);
+      return publicData.publicUrl;
+    } catch (err) {
+      console.warn('[SupabaseService] Erro inesperado no upload da foto:', err);
+      return null;
+    }
+  },
 };
