@@ -30,11 +30,39 @@ const defaultState: AppState = {
 // In-Memory Master Cache
 let memoryState: AppState = { ...defaultState };
 
+export function cleanOrphanNotificationsAndHistory(state: AppState): boolean {
+  const requestIds = new Set((state.maintenanceRequests || []).map(r => r.id));
+  const problemIds = new Set((state.problems || []).map(p => p.id));
+  const beforeNotifs = (state.notifications || []).length;
+  const beforeHistory = (state.history || []).length;
+
+  state.notifications = (state.notifications || []).filter(n => {
+    if (n.relatedEntity === 'maintenance_request' && n.relatedId && !requestIds.has(n.relatedId)) return false;
+    if (n.relatedEntity === 'problem' && n.relatedId && !problemIds.has(n.relatedId)) return false;
+    if (n.message?.includes('"poo"') || n.title?.toLowerCase() === 'poo') return false;
+    return true;
+  });
+
+  state.history = (state.history || []).filter(h => {
+    if (h.entity === 'maintenance_request' && h.entityId && !requestIds.has(h.entityId)) return false;
+    if ((h.entity === 'problem' || h.entity === 'problems') && h.entityId && !problemIds.has(h.entityId)) return false;
+    if (h.details?.includes('"poo"') || h.action?.toLowerCase().includes('poo')) return false;
+    return true;
+  });
+
+  return state.notifications.length < beforeNotifs || state.history.length < beforeHistory;
+}
+
 export function loadState(): AppState {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       memoryState = { ...defaultState, ...JSON.parse(raw) };
+      if (cleanOrphanNotificationsAndHistory(memoryState)) {
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(memoryState));
+        } catch (_) {}
+      }
       return memoryState;
     }
   } catch (e) {
@@ -90,6 +118,19 @@ export const db = {
         };
         saveState(mergedState);
       }
+    }
+
+    // Limpeza de registros órfãos: notificações e histórico que referenciam
+    // solicitações ou problemas que já não existem (ex.: registros de teste removidos)
+    const currentState = loadState();
+    const beforeNotifs = currentState.notifications.length;
+    const beforeHistory = currentState.history.length;
+
+    if (cleanOrphanNotificationsAndHistory(currentState)) {
+      console.info(
+        `[Store] Limpeza de órfãos: removidas ${beforeNotifs - currentState.notifications.length} notificação(ões) e ${beforeHistory - currentState.history.length} entrada(s) de histórico referenciando registros inexistentes ou de teste.`
+      );
+      saveState(currentState);
     }
   },
 
@@ -237,8 +278,15 @@ export const db = {
     state.actionPlans.forEach(a => { if (a.problemId === id) a.problemId = ''; });
     state.maintenanceRecords.forEach(m => { if (m.problemId === id) m.problemId = ''; });
     state.nonConformities.forEach(n => { if (n.problemId === id) n.problemId = ''; });
+    // Cascade: remover notificações e histórico órfãos vinculados a este problema
+    const orphanNotifs = state.notifications.filter(n => n.relatedEntity === 'problem' && n.relatedId === id);
+    state.notifications = state.notifications.filter(n => !(n.relatedEntity === 'problem' && n.relatedId === id));
+    const orphanHistory = state.history.filter(h => (h.entity === 'problem' || h.entity === 'problems') && h.entityId === id);
+    state.history = state.history.filter(h => !((h.entity === 'problem' || h.entity === 'problems') && h.entityId === id));
     saveState(state);
     supabaseService.deleteRecord('problems', id);
+    orphanNotifs.forEach(n => supabaseService.deleteRecord('notifications', n.id));
+    orphanHistory.forEach(h => supabaseService.deleteRecord('history', h.id));
   },
 
   // GUT
@@ -477,8 +525,15 @@ export const db = {
     const state = loadState();
     if (!state.maintenanceRequests) return;
     state.maintenanceRequests = state.maintenanceRequests.filter(r => r.id !== id);
+    // Cascade: remover notificações e histórico órfãos vinculados a esta solicitação
+    const orphanNotifs = state.notifications.filter(n => n.relatedEntity === 'maintenance_request' && n.relatedId === id);
+    state.notifications = state.notifications.filter(n => !(n.relatedEntity === 'maintenance_request' && n.relatedId === id));
+    const orphanHistory = state.history.filter(h => h.entity === 'maintenance_request' && h.entityId === id);
+    state.history = state.history.filter(h => !(h.entity === 'maintenance_request' && h.entityId === id));
     saveState(state);
     supabaseService.deleteRecord('maintenance_requests', id);
+    orphanNotifs.forEach(n => supabaseService.deleteRecord('notifications', n.id));
+    orphanHistory.forEach(h => supabaseService.deleteRecord('history', h.id));
   },
 
   // Demo data loader
