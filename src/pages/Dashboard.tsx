@@ -1,8 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { db, isDateOverdue, getOverdueDaysText, isDateUpcoming } from '../store';
 import { useAuth } from '../contexts/AuthContext';
-import { Card, StatCard, PageHeader, Select, Badge, Button } from '../components/ui';
-import { FolderKanban, Wrench, AlertTriangle, ClipboardList, Settings, Bell, ShieldAlert, ArrowRight, CheckCircle2, Clock } from 'lucide-react';
+import { Card, StatCard, PageHeader, Select, Badge, Button, StatusBadge } from '../components/ui';
+import { FolderKanban, Wrench, AlertTriangle, ClipboardList, Settings, Bell, ShieldAlert, ArrowRight, CheckCircle2, Clock, Shield, Briefcase, HardHat, User, GraduationCap, Activity, CheckCircle, AlertCircle, XCircle, TrendingUp, Users, Calendar, Inbox } from 'lucide-react';
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { Link, useNavigate } from 'react-router-dom';
 
@@ -20,6 +20,9 @@ export default function Dashboard() {
   const maintenanceRecords = db.getMaintenanceRecords();
   const nonConformities = db.getNonConformities();
   const notifications = db.getNotifications(user?.id);
+  const maintenanceRequests = db.getMaintenanceRequests();
+  const people = db.getPeople();
+  const productionActivities = db.getProductionActivities();
 
   // Sectors list
   const sectors = useMemo(() => {
@@ -176,34 +179,209 @@ export default function Dashboard() {
   const projectStatusData = useMemo(() => {
     const statuses = ['planning', 'in_progress', 'paused', 'completed', 'cancelled'];
     const labels: Record<string, string> = { planning: 'Planejamento', in_progress: 'Em Andamento', paused: 'Pausado', completed: 'Concluído', cancelled: 'Cancelado' };
-    return statuses.map(s => ({ name: labels[s], value: projects.filter(p => p.status === s).length })).filter(d => d.value > 0);
+    const colors: Record<string, string> = {
+      planning: '#3B82F6',    // Azul (planejamento)
+      in_progress: '#06B6D4', // Azul-ciano (em andamento)
+      paused: '#F59E0B',      // Âmbar (pausado)
+      completed: '#10B981',   // Verde (concluído)
+      cancelled: '#6B7280',   // Cinza (cancelado)
+    };
+    return statuses.map(s => ({
+      name: labels[s],
+      value: projects.filter(p => p.status === s).length,
+      fill: colors[s],
+    })).filter(d => d.value > 0);
   }, [projects]);
 
   const equipmentStatusData = useMemo(() => {
     const statuses = ['operating', 'maintenance', 'stopped', 'out_of_service'];
     const labels: Record<string, string> = { operating: 'Em Operação', maintenance: 'Em Manutenção', stopped: 'Parado', out_of_service: 'Fora de Uso' };
-    return statuses.map(s => ({ name: labels[s], value: filteredEquipment.filter(e => e.status === s).length }));
+    const colors: Record<string, string> = {
+      operating: '#10B981',      // Verde (operacional)
+      maintenance: '#3B82F6',    // Azul (manutenção preventiva/corretiva em curso)
+      stopped: '#F59E0B',        // Âmbar (parado necessitando atenção)
+      out_of_service: '#6B7280', // Cinza (inativo / fora de uso)
+    };
+    return statuses.map(s => ({
+      name: labels[s],
+      value: filteredEquipment.filter(e => e.status === s).length,
+      fill: colors[s],
+    }));
   }, [filteredEquipment]);
 
   const productionData = useMemo(() => {
     const activities = db.getProductionActivities();
     return [
-      { name: 'Pendentes', value: activities.filter(a => a.status === 'pending').length },
-      { name: 'Em Andamento', value: activities.filter(a => a.status === 'in_progress').length },
-      { name: 'Concluídas', value: activities.filter(a => a.status === 'completed').length },
-      { name: 'Atrasadas', value: activities.filter(a => a.status === 'overdue' || isDateOverdue(a.deadline, a.status)).length },
+      { name: 'Pendentes', value: activities.filter(a => a.status === 'pending').length, fill: '#F59E0B' },    // Âmbar (aguardando)
+      { name: 'Em Andamento', value: activities.filter(a => a.status === 'in_progress').length, fill: '#3B82F6' }, // Azul (em andamento)
+      { name: 'Concluídas', value: activities.filter(a => a.status === 'completed').length, fill: '#10B981' },   // Verde (concluído)
+      { name: 'Atrasadas', value: activities.filter(a => a.status === 'overdue' || isDateOverdue(a.deadline, a.status)).length, fill: '#EF4444' }, // Vermelho (atrasado)
     ];
   }, []);
 
   const qualityData = useMemo(() => {
     return [
-      { name: 'Identificados', value: filteredProblems.filter(p => p.status === 'identified').length },
-      { name: 'Em Análise', value: filteredProblems.filter(p => p.status === 'analyzing' || p.status === 'treating').length },
-      { name: 'Resolvidos', value: filteredProblems.filter(p => p.status === 'resolved').length },
-      { name: 'Não Conformidades', value: filteredNonConformities.length },
-      { name: 'Planos 5W2H', value: filteredActionPlans.length },
+      { name: 'Identificados', value: filteredProblems.filter(p => p.status === 'identified').length, fill: '#F59E0B' }, // Âmbar (identificado / atenção)
+      { name: 'Em Análise', value: filteredProblems.filter(p => p.status === 'analyzing' || p.status === 'treating').length, fill: '#3B82F6' }, // Azul (em andamento)
+      { name: 'Resolvidos', value: filteredProblems.filter(p => p.status === 'resolved').length, fill: '#10B981' },     // Verde (resolvido)
+      { name: 'Não Conformidades', value: filteredNonConformities.length, fill: '#EF4444' },                            // Vermelho (não conformidade crítica/grave)
+      { name: 'Planos 5W2H', value: filteredActionPlans.length, fill: '#8B5CF6' },                                      // Roxo (categoria de planos de ação)
     ];
   }, [filteredProblems, filteredNonConformities, filteredActionPlans]);
+
+  // ── Identificação Confiável do Usuário na Tabela de Pessoas (People) ──
+  const userPerson = useMemo(() => {
+    if (!user) return null;
+    return people.find(p => p.id === user.id || (p.email && user.email && p.email.toLowerCase() === user.email.toLowerCase())) || null;
+  }, [people, user]);
+
+  // ── Indicadores Específicos: Administrador (Admin) ──
+  const adminMetrics = useMemo(() => {
+    const totalMaint = filteredMaintenance.length;
+    const completedMaint = filteredMaintenance.filter(m => m.status === 'completed').length;
+    const overdueMaint = filteredMaintenance.filter(m => m.status === 'overdue' || isDateOverdue(m.deadline, m.status)).length;
+    const inProgressMaint = filteredMaintenance.filter(m => m.status === 'in_progress' || m.status === 'scheduled').length;
+    const resolutionRate = totalMaint > 0 ? Math.round((completedMaint / totalMaint) * 100) : null;
+
+    const totalReq = maintenanceRequests.length;
+    const openReq = maintenanceRequests.filter(r => r.status === 'pending' || r.status === 'analyzing').length;
+    const resolvedReq = maintenanceRequests.filter(r => r.status === 'approved' || r.status === 'completed').length;
+
+    const totalEq = filteredEquipment.length;
+    const operatingEq = filteredEquipment.filter(e => e.status === 'operating').length;
+    const abnormalEq = filteredEquipment.filter(e => e.status !== 'operating').length;
+    const availabilityRate = totalEq > 0 ? Math.round((operatingEq / totalEq) * 100) : null;
+
+    return {
+      totalMaintenance: totalMaint,
+      completedMaintenance: completedMaint,
+      overdueMaintenance: overdueMaint,
+      inProgressMaintenance: inProgressMaint,
+      completionRate: resolutionRate,
+      totalRequests: totalReq,
+      openRequests: openReq,
+      resolvedRequests: resolvedReq,
+      totalEquipment: totalEq,
+      operatingEquipment: operatingEq,
+      abnormalEquipment: abnormalEq,
+      operationalAvailability: availabilityRate,
+    };
+  }, [filteredMaintenance, maintenanceRequests, filteredEquipment]);
+
+  // ── Indicadores Específicos: Gerente (Manager) ──
+  const managerMetrics = useMemo(() => {
+    const pendingMaint = filteredMaintenance.filter(m => m.status === 'scheduled' || m.status === 'in_progress').length;
+    const overdueMaint = filteredMaintenance.filter(m => m.status === 'overdue' || isDateOverdue(m.deadline, m.status)).length;
+    const completedMaint = filteredMaintenance.filter(m => m.status === 'completed').length;
+    const totalEvaluated = completedMaint + overdueMaint;
+    const onTimeRate = totalEvaluated > 0 ? Math.round((completedMaint / totalEvaluated) * 100) : null;
+    const pendingReq = maintenanceRequests.filter(r => r.status === 'pending' || r.status === 'analyzing').length;
+
+    // Equipamentos que mais precisam de atenção
+    const criticalEqs = filteredEquipment.filter(e => {
+      const isCritical = e.criticality === 'critica' || e.criticality === 'alta';
+      const isAbnormal = e.status === 'maintenance' || e.status === 'stopped' || e.status === 'out_of_service';
+      const hasOverdue = filteredMaintenance.some(m => m.equipmentId === e.id && (m.status === 'overdue' || isDateOverdue(m.deadline, m.status)));
+      return isCritical && (isAbnormal || hasOverdue);
+    });
+
+    // Distribuição de atividades por responsável técnico
+    const teamDistributionMap: Record<string, { person: { id: string; name: string }; count: number }> = {};
+    filteredMaintenance.forEach(m => {
+      if (m.responsibleId) {
+        const p = people.find(person => person.id === m.responsibleId);
+        const name = p?.name || `ID: ${m.responsibleId.slice(0, 8)}`;
+        if (!teamDistributionMap[m.responsibleId]) {
+          teamDistributionMap[m.responsibleId] = { person: { id: m.responsibleId, name }, count: 0 };
+        }
+        teamDistributionMap[m.responsibleId].count++;
+      }
+    });
+    const responsibleCounts = Object.values(teamDistributionMap).sort((a, b) => b.count - a.count).slice(0, 4);
+
+    return {
+      pendingMaint,
+      overdueMaintenance: overdueMaint,
+      completedMaint,
+      slaRate: onTimeRate,
+      pendingRequests: pendingReq,
+      criticalEquipmentInAlert: criticalEqs.length,
+      responsibleCounts,
+    };
+  }, [filteredMaintenance, filteredEquipment, people, maintenanceRequests]);
+
+  // ── Indicadores Específicos: Técnico (Technician) ──
+  const technicianMetrics = useMemo(() => {
+    if (!user) return { totalAssigned: 0, myTasks: [], pending: 0, inProgress: 0, completed: 0, overdue: 0, upcoming: 0 };
+    const pId = userPerson?.id;
+    // Identificação confiável por ID do usuário ou ID da pessoa vinculada por email
+    const myTasks = filteredMaintenance.filter(m => m.responsibleId === user.id || (pId && m.responsibleId === pId));
+    
+    const pending = myTasks.filter(m => m.status === 'scheduled').length;
+    const inProgress = myTasks.filter(m => m.status === 'in_progress').length;
+    const completed = myTasks.filter(m => m.status === 'completed').length;
+    const overdue = myTasks.filter(m => m.status === 'overdue' || isDateOverdue(m.deadline, m.status)).length;
+    
+    const upcoming = myTasks.filter(m =>
+      m.status !== 'completed' &&
+      m.status !== 'cancelled' &&
+      !isDateOverdue(m.deadline, m.status) &&
+      isDateUpcoming(m.deadline, 15)
+    ).length;
+
+    return {
+      totalAssigned: myTasks.length,
+      myTasks,
+      pending,
+      inProgress,
+      completed,
+      overdue,
+      upcoming,
+    };
+  }, [filteredMaintenance, user, userPerson]);
+
+  // ── Indicadores Específicos: Funcionário (Employee) ──
+  const employeeMetrics = useMemo(() => {
+    if (!user) return { totalRequests: 0, myRequests: [], pending: 0, analyzing: 0, approved: 0, completed: 0, rejected: 0 };
+    // Identificação confiável por requesterId === user.id
+    const myRequests = maintenanceRequests.filter(r => r.requesterId === user.id);
+    
+    const pending = myRequests.filter(r => r.status === 'pending').length;
+    const analyzing = myRequests.filter(r => r.status === 'analyzing').length;
+    const approved = myRequests.filter(r => r.status === 'approved').length;
+    const completed = myRequests.filter(r => r.status === 'completed').length;
+    const rejected = myRequests.filter(r => r.status === 'rejected').length;
+
+    return {
+      totalRequests: myRequests.length,
+      myRequests,
+      pending,
+      analyzing,
+      approved,
+      completed,
+      rejected,
+    };
+  }, [maintenanceRequests, user]);
+
+  // ── Indicadores Específicos: Aluno (Student) ──
+  const studentMetrics = useMemo(() => {
+    if (!user) return { myRequests: [], availableMachines: 0, totalMachines: 0, availabilityRate: null, practicalActivities: 0 };
+    // Solicitações acadêmicas do próprio aluno
+    const myRequests = maintenanceRequests.filter(r => r.requesterId === user.id);
+    
+    const totalMachines = filteredEquipment.length;
+    const availableMachines = filteredEquipment.filter(e => e.status === 'operating').length;
+    const availabilityRate = totalMachines > 0 ? Math.round((availableMachines / totalMachines) * 100) : null;
+    const practicalActivities = productionActivities.filter(a => a.status === 'in_progress').length;
+
+    return {
+      myRequests,
+      availableMachines,
+      totalMachines,
+      availabilityRate,
+      practicalActivities,
+    };
+  }, [maintenanceRequests, filteredEquipment, productionActivities, user]);
 
   const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#06B6D4'];
 
@@ -237,6 +415,332 @@ export default function Dashboard() {
         <StatCard title="Manut. Atrasadas" value={stats.overdueMaintenance} icon={<Settings size={20} />} color="red" />
         <StatCard title="Alertas Ativos" value={stats.unreadNotifications} icon={<Bell size={20} />} color="orange" />
       </div>
+      {/* Seção de Indicadores por Perfil */}
+      {user && (
+        <Card className="p-5 shadow-sm bg-gradient-to-r from-gray-50 to-white border border-gray-200">
+          {/* Header da Seção de Perfil */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-gray-100">
+            <div className="flex items-center gap-3">
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold shadow-sm ${
+                user.role === 'admin' ? 'bg-indigo-100 text-indigo-700' :
+                user.role === 'manager' ? 'bg-purple-100 text-purple-700' :
+                user.role === 'technician' ? 'bg-amber-100 text-amber-700' :
+                user.role === 'student' ? 'bg-emerald-100 text-emerald-700' :
+                'bg-blue-100 text-blue-700'
+              }`}>
+                {user.role === 'admin' && <Shield size={22} />}
+                {user.role === 'manager' && <Briefcase size={22} />}
+                {user.role === 'technician' && <HardHat size={22} />}
+                {user.role === 'student' && <GraduationCap size={22} />}
+                {user.role === 'employee' && <User size={22} />}
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-bold text-gray-800 text-base">
+                    {user.role === 'admin' && 'Painel Executivo — Administrador'}
+                    {user.role === 'manager' && 'Painel Tático — Gestão Operacional'}
+                    {user.role === 'technician' && 'Minha Fila de Trabalho — Manutenção'}
+                    {user.role === 'student' && 'Ambiente Prático — Aluno'}
+                    {user.role === 'employee' && 'Minhas Solicitações — Colaborador'}
+                  </h3>
+                  <Badge color={
+                    user.role === 'admin' ? 'purple' :
+                    user.role === 'manager' ? 'blue' :
+                    user.role === 'technician' ? 'yellow' :
+                    user.role === 'student' ? 'green' : 'gray'
+                  }>
+                    {user.role === 'admin' ? 'Administrador' :
+                     user.role === 'manager' ? 'Gestor' :
+                     user.role === 'technician' ? 'Técnico' :
+                     user.role === 'student' ? 'Aluno' : 'Colaborador'}
+                  </Badge>
+                </div>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {user.role === 'admin' && 'Métricas globais consolidadas e integridade do parque fabril'}
+                  {user.role === 'manager' && 'Acompanhamento de prazos, triagem de solicitações e criticidade'}
+                  {user.role === 'technician' && 'Ordens de serviço atribuídas ao seu usuário e cronograma de intervenções'}
+                  {user.role === 'student' && 'Disponibilidade de equipamentos para práticas didáticas e chamados próprios'}
+                  {user.role === 'employee' && 'Acompanhamento direto do ciclo de vida das suas solicitações de reparo'}
+                </p>
+              </div>
+            </div>
+
+            {/* Ações Rápidas por Perfil */}
+            <div className="flex items-center gap-2">
+              {user.role === 'technician' && (
+                <Link to="/maintenance">
+                  <Button size="sm" variant="outline" className="text-xs flex items-center gap-1.5">
+                    <Wrench size={14} /> Minhas Ordens
+                  </Button>
+                </Link>
+              )}
+              {(user.role === 'employee' || user.role === 'student') && (
+                <Link to="/requests">
+                  <Button size="sm" variant="outline" className="text-xs flex items-center gap-1.5">
+                    <Inbox size={14} /> Minhas Solicitações
+                  </Button>
+                </Link>
+              )}
+              {user.role === 'manager' && (
+                <Link to="/requests">
+                  <Button size="sm" variant="outline" className="text-xs flex items-center gap-1.5">
+                    <Inbox size={14} /> Triagem de Solicitações
+                  </Button>
+                </Link>
+              )}
+              {user.role === 'admin' && (
+                <Link to="/reports">
+                  <Button size="sm" variant="outline" className="text-xs flex items-center gap-1.5">
+                    <Activity size={14} /> Relatórios Globais
+                  </Button>
+                </Link>
+              )}
+            </div>
+          </div>
+
+          {/* Conteúdo Dinâmico por Perfil */}
+          <div className="pt-4">
+            {/* ADMIN */}
+            {user.role === 'admin' && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* 1. Disponibilidade Operacional */}
+                <div className="bg-white p-3.5 rounded-xl border border-gray-200">
+                  <span className="text-xs text-gray-500 font-medium">Disponibilidade Operacional</span>
+                  {adminMetrics.operationalAvailability !== null ? (
+                    <div className="text-xl font-bold text-gray-800 mt-1 flex items-baseline gap-1.5">
+                      <span className="text-emerald-600">{adminMetrics.operationalAvailability}%</span>
+                      <span className="text-[11px] font-normal text-gray-500">
+                        ({adminMetrics.operatingEquipment} de {adminMetrics.totalEquipment} operando)
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="mt-1">
+                      <span className="text-xs text-gray-400 font-normal">Nenhum equipamento cadastrado</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* 2. Fluxo de Solicitações */}
+                <div className="bg-white p-3.5 rounded-xl border border-gray-200">
+                  <span className="text-xs text-gray-500 font-medium">Fluxo de Solicitações</span>
+                  {adminMetrics.totalRequests > 0 ? (
+                    <div className="text-xl font-bold text-gray-800 mt-1 flex items-baseline gap-1.5">
+                      <span>{adminMetrics.openRequests} / {adminMetrics.totalRequests}</span>
+                      <span className="text-xs font-normal text-amber-600">em aberto</span>
+                    </div>
+                  ) : (
+                    <div className="mt-1">
+                      <span className="text-xs text-gray-400 font-normal">Nenhuma solicitação registrada</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* 3. Taxa de Conclusão */}
+                <div className="bg-white p-3.5 rounded-xl border border-gray-200">
+                  <span className="text-xs text-gray-500 font-medium">Taxa de Conclusão</span>
+                  {adminMetrics.completionRate !== null ? (
+                    <div className="text-xl font-bold text-gray-800 mt-1 flex items-baseline gap-1.5">
+                      <span className="text-emerald-600">{adminMetrics.completionRate}%</span>
+                      <span className="text-[11px] font-normal text-gray-500">
+                        ({adminMetrics.completedMaintenance} de {adminMetrics.totalMaintenance} concluídas)
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="mt-1">
+                      <span className="text-xs text-gray-400 font-normal">Sem manutenções para calcular</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* 4. Status de Manutenções */}
+                <div className="bg-white p-3.5 rounded-xl border border-gray-200">
+                  <span className="text-xs text-gray-500 font-medium">Status de Manutenções</span>
+                  {adminMetrics.totalMaintenance > 0 ? (
+                    <div className="text-xl font-bold text-gray-800 mt-1 flex items-center gap-3">
+                      <span className="text-blue-600 text-sm font-semibold">
+                        {adminMetrics.inProgressMaintenance} <span className="text-[11px] font-normal text-gray-500">em andamento</span>
+                      </span>
+                      <span className="text-red-600 text-sm font-semibold">
+                        {adminMetrics.overdueMaintenance} <span className="text-[11px] font-normal text-gray-500">atrasadas</span>
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="mt-1">
+                      <span className="text-xs text-gray-400 font-normal">Nenhuma manutenção registrada</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* MANAGER */}
+            {user.role === 'manager' && (
+              <div className="space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="bg-white p-3.5 rounded-xl border border-gray-200">
+                    <span className="text-xs text-gray-500 font-medium">Solicitações Pendentes</span>
+                    <div className="text-xl font-bold text-amber-600 mt-1 flex items-baseline gap-1">
+                      <span>{managerMetrics.pendingRequests}</span>
+                      <span className="text-[11px] font-normal text-gray-500">aguardando análise</span>
+                    </div>
+                  </div>
+
+                  <div className="bg-white p-3.5 rounded-xl border border-gray-200">
+                    <span className="text-xs text-gray-500 font-medium">Manutenções Atrasadas (Equipe)</span>
+                    <div className="text-xl font-bold text-red-600 mt-1 flex items-baseline gap-1">
+                      <span>{managerMetrics.overdueMaintenance}</span>
+                      <span className="text-[11px] font-normal text-gray-500">fora do prazo</span>
+                    </div>
+                  </div>
+
+                  <div className="bg-white p-3.5 rounded-xl border border-gray-200">
+                    <span className="text-xs text-gray-500 font-medium">Cumprimento de Prazos (SLA)</span>
+                    <div className="text-xl font-bold text-gray-800 mt-1">
+                      {managerMetrics.slaRate !== null ? (
+                        <span className={managerMetrics.slaRate >= 80 ? 'text-emerald-600' : 'text-amber-600'}>
+                          {managerMetrics.slaRate}% <span className="text-[11px] font-normal text-gray-500">no prazo</span>
+                        </span>
+                      ) : (
+                        <span className="text-xs text-gray-400 font-normal">Dados insuficientes</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="bg-white p-3.5 rounded-xl border border-gray-200">
+                    <span className="text-xs text-gray-500 font-medium">Equipamentos Críticos em Alerta</span>
+                    <div className="text-xl font-bold text-gray-800 mt-1 flex items-baseline gap-1">
+                      <span className={managerMetrics.criticalEquipmentInAlert > 0 ? 'text-red-600' : 'text-emerald-600'}>
+                        {managerMetrics.criticalEquipmentInAlert}
+                      </span>
+                      <span className="text-[11px] font-normal text-gray-500">em parada ou manutenção</span>
+                    </div>
+                  </div>
+                </div>
+
+                {managerMetrics.responsibleCounts.length > 0 && (
+                  <div className="bg-white p-3 rounded-xl border border-gray-200 flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-semibold text-gray-700 flex items-center gap-1.5 mr-2">
+                      <Users size={14} className="text-gray-500" /> Carga da Equipe:
+                    </span>
+                    {managerMetrics.responsibleCounts.map(({ person, count }) => (
+                      <span key={person.id} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-gray-100 text-xs text-gray-700 border border-gray-200">
+                        <span className="font-medium">{person.name}:</span>
+                        <span className="font-bold text-blue-600">{count} {count === 1 ? 'ordem' : 'ordens'}</span>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* TECHNICIAN */}
+            {user.role === 'technician' && (
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                <div className="bg-white p-3.5 rounded-xl border border-gray-200">
+                  <span className="text-xs text-gray-500 font-medium">Minhas Ordens Atribuídas</span>
+                  <div className="text-xl font-bold text-gray-800 mt-1">{technicianMetrics.totalAssigned}</div>
+                </div>
+
+                <div className="bg-white p-3.5 rounded-xl border border-gray-200">
+                  <span className="text-xs text-gray-500 font-medium">Em Andamento</span>
+                  <div className="text-xl font-bold text-blue-600 mt-1">{technicianMetrics.inProgress}</div>
+                </div>
+
+                <div className="bg-white p-3.5 rounded-xl border border-gray-200">
+                  <span className="text-xs text-gray-500 font-medium">Pendentes / Agendadas</span>
+                  <div className="text-xl font-bold text-amber-600 mt-1">{technicianMetrics.pending}</div>
+                </div>
+
+                <div className="bg-white p-3.5 rounded-xl border border-gray-200">
+                  <span className="text-xs text-gray-500 font-medium">Atrasadas</span>
+                  <div className="text-xl font-bold text-red-600 mt-1">{technicianMetrics.overdue}</div>
+                </div>
+
+                <div className="bg-white p-3.5 rounded-xl border border-gray-200 col-span-2 sm:col-span-1">
+                  <span className="text-xs text-gray-500 font-medium">Próximos 15 Dias</span>
+                  <div className="text-xl font-bold text-purple-600 mt-1">{technicianMetrics.upcoming}</div>
+                </div>
+              </div>
+            )}
+
+            {/* EMPLOYEE */}
+            {user.role === 'employee' && (
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                <div className="bg-white p-3.5 rounded-xl border border-gray-200">
+                  <span className="text-xs text-gray-500 font-medium">Minhas Solicitações</span>
+                  <div className="text-xl font-bold text-gray-800 mt-1">{employeeMetrics.totalRequests}</div>
+                </div>
+
+                <div className="bg-white p-3.5 rounded-xl border border-gray-200">
+                  <span className="text-xs text-gray-500 font-medium">Aguardando Triagem</span>
+                  <div className="text-xl font-bold text-amber-600 mt-1">
+                    {employeeMetrics.pending + employeeMetrics.analyzing}
+                    <span className="text-[10px] text-gray-400 font-normal block">
+                      {employeeMetrics.pending} novas, {employeeMetrics.analyzing} em análise
+                    </span>
+                  </div>
+                </div>
+
+                <div className="bg-white p-3.5 rounded-xl border border-gray-200">
+                  <span className="text-xs text-gray-500 font-medium">Aprovadas / Em Reparo</span>
+                  <div className="text-xl font-bold text-blue-600 mt-1">{employeeMetrics.approved}</div>
+                </div>
+
+                <div className="bg-white p-3.5 rounded-xl border border-gray-200">
+                  <span className="text-xs text-gray-500 font-medium">Concluídas</span>
+                  <div className="text-xl font-bold text-emerald-600 mt-1">{employeeMetrics.completed}</div>
+                </div>
+
+                <div className="bg-white p-3.5 rounded-xl border border-gray-200 col-span-2 sm:col-span-1">
+                  <span className="text-xs text-gray-500 font-medium">Rejeitadas</span>
+                  <div className="text-xl font-bold text-gray-500 mt-1">{employeeMetrics.rejected}</div>
+                </div>
+              </div>
+            )}
+
+            {/* STUDENT */}
+            {user.role === 'student' && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="bg-white p-3.5 rounded-xl border border-gray-200">
+                  <span className="text-xs text-gray-500 font-medium">Minhas Solicitações de Reparo</span>
+                  <div className="text-xl font-bold text-blue-600 mt-1 flex items-baseline gap-1">
+                    <span>{studentMetrics.myRequests.length}</span>
+                    <span className="text-[11px] font-normal text-gray-500">abertas por você</span>
+                  </div>
+                </div>
+
+                <div className="bg-white p-3.5 rounded-xl border border-gray-200">
+                  <span className="text-xs text-gray-500 font-medium">Máquinas Aptas para Prática</span>
+                  <div className="text-xl font-bold text-emerald-600 mt-1 flex items-baseline gap-1">
+                    <span>{studentMetrics.availableMachines}</span>
+                    <span className="text-[11px] font-normal text-gray-500">de {studentMetrics.totalMachines} ativas</span>
+                  </div>
+                </div>
+
+                <div className="bg-white p-3.5 rounded-xl border border-gray-200">
+                  <span className="text-xs text-gray-500 font-medium">Taxa de Disponibilidade</span>
+                  <div className="text-xl font-bold text-gray-800 mt-1">
+                    {studentMetrics.availabilityRate !== null ? (
+                      <span className="text-emerald-600">{studentMetrics.availabilityRate}% <span className="text-[11px] font-normal text-gray-500">operacionais</span></span>
+                    ) : (
+                      <span className="text-xs text-gray-400 font-normal">Dados insuficientes</span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="bg-white p-3.5 rounded-xl border border-gray-200">
+                  <span className="text-xs text-gray-500 font-medium">Atividades Práticas Ativas</span>
+                  <div className="text-xl font-bold text-purple-600 mt-1 flex items-baseline gap-1">
+                    <span>{studentMetrics.practicalActivities}</span>
+                    <span className="text-[11px] font-normal text-gray-500">em andamento no laboratório</span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </Card>
+      )}
+
 
       {/* Seção ATENÇÃO NECESSÁRIA (Data-Driven Alerts) */}
       <Card className="p-5 border-l-4 border-l-amber-500 shadow-sm">
@@ -310,7 +814,7 @@ export default function Dashboard() {
                 </div>
                 <div className="p-3 bg-white border border-gray-200 rounded-lg">
                   <p className="text-xs text-gray-500">Em Manutenção</p>
-                  <p className="text-lg font-bold text-amber-600">{filteredEquipment.filter(e => e.status === 'maintenance').length}</p>
+                  <p className="text-lg font-bold text-blue-600">{filteredEquipment.filter(e => e.status === 'maintenance').length}</p>
                 </div>
               </div>
             </div>
@@ -321,7 +825,11 @@ export default function Dashboard() {
                 <XAxis dataKey="name" tick={{ fontSize: 11 }} />
                 <YAxis />
                 <Tooltip />
-                <Bar dataKey="value" fill="#3B82F6" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                  {equipmentStatusData.map((entry, index) => (
+                    <Cell key={`cell-eq-${index}`} fill={entry.fill} />
+                  ))}
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           )}
@@ -351,7 +859,9 @@ export default function Dashboard() {
             <ResponsiveContainer width="100%" height={240}>
               <PieChart>
                 <Pie data={projectStatusData} cx="50%" cy="50%" outerRadius={75} dataKey="value" label={({ name, value }) => `${name}: ${value}`}>
-                  {projectStatusData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                  {projectStatusData.map((entry, index) => (
+                    <Cell key={`cell-prj-${index}`} fill={entry.fill} />
+                  ))}
                 </Pie>
                 <Tooltip />
                 <Legend />
@@ -369,7 +879,11 @@ export default function Dashboard() {
               <XAxis dataKey="name" tick={{ fontSize: 11 }} />
               <YAxis />
               <Tooltip />
-              <Bar dataKey="value" fill="#10B981" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                {productionData.map((entry, index) => (
+                  <Cell key={`cell-prod-${index}`} fill={entry.fill} />
+                ))}
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         </Card>
@@ -383,7 +897,11 @@ export default function Dashboard() {
               <XAxis dataKey="name" tick={{ fontSize: 11 }} />
               <YAxis />
               <Tooltip />
-              <Bar dataKey="value" fill="#F59E0B" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                {qualityData.map((entry, index) => (
+                  <Cell key={`cell-qual-${index}`} fill={entry.fill} />
+                ))}
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         </Card>
