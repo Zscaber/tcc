@@ -1,10 +1,17 @@
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../store';
-import { LayoutDashboard, FolderKanban, Users, Wrench, AlertTriangle, BrainCircuit, BarChart3, ClipboardList, Settings, Bell, LogOut, Menu, X, Search, FileText, History, Map, ChevronDown, Calendar, Inbox } from 'lucide-react';
+import { LayoutDashboard, FolderKanban, Users, Wrench, AlertTriangle, BrainCircuit, BarChart3, ClipboardList, Settings, Bell, LogOut, Menu, X, Search, FileText, History, Map, ChevronDown, Calendar, Inbox, TrendingUp } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 
-const navGroups = [
+type NavItem = {
+  path: string;
+  label: string;
+  icon: React.ElementType;
+  roles?: string[];
+};
+
+const navGroups: { category: string; items: NavItem[] }[] = [
   {
     category: 'GESTÃO',
     items: [
@@ -39,6 +46,7 @@ const navGroups = [
       { path: '/ai-assistant', label: 'Assistente IA', icon: BrainCircuit },
       { path: '/notifications', label: 'Notificações', icon: Bell },
       { path: '/history', label: 'Histórico', icon: History },
+      { path: '/performance', label: 'Desempenho', icon: TrendingUp, roles: ['admin', 'manager'] },
       { path: '/reports', label: 'Relatórios', icon: FileText },
       { path: '/users', label: 'Usuários', icon: Users },
     ],
@@ -88,6 +96,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               {navGroups.map(group => {
                 const visibleItems = group.items.filter(item => {
                   if (item.path === '/users') return user?.role === 'admin';
+                  if (item.roles) return item.roles.includes(user?.role ?? '');
                   return true;
                 });
                 if (visibleItems.length === 0) return null;

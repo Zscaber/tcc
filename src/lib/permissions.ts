@@ -162,4 +162,9 @@ export const Permissions = {
 
   /** Admin pode excluir */
   canDeleteRequest: (user: User | null): boolean => user?.role === 'admin',
+
+  // 14. DESEMPENHO
+  canViewPerformance: (user: User | null): boolean => {
+    return user?.role === 'admin' || user?.role === 'manager';
+  },
 };

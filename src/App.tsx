@@ -28,6 +28,7 @@ import Schedule from './pages/Schedule';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
 import Requests from './pages/Requests';
+import Performance from './pages/Performance';
 
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -62,6 +63,18 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function RoleRoute({ children, allowed }: { children: React.ReactNode; allowed: string[] }) {
+  const { user, isLoading, isAuthenticated } = useAuth();
+  if (isLoading) return (
+    <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+      <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (!user || !allowed.includes(user.role)) return <Navigate to="/" replace />;
+  return <Layout>{children}</Layout>;
+}
+
 function AppRoutes() {
   return (
     <Routes>
@@ -90,6 +103,7 @@ function AppRoutes() {
       <Route path="/users" element={<ProtectedRoute><UsersPage /></ProtectedRoute>} />
       <Route path="/search" element={<ProtectedRoute><SearchPage /></ProtectedRoute>} />
       <Route path="/requests" element={<ProtectedRoute><Requests /></ProtectedRoute>} />
+      <Route path="/performance" element={<RoleRoute allowed={['admin', 'manager']}><Performance /></RoleRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
